@@ -142,7 +142,7 @@ class Engine:
         st = self._events.states.setdefault(rule.id, RuleState())
         started = time.time()
         try:
-            out = await asyncio.to_thread(
+            out, _duration = await asyncio.to_thread(
                 run_script,
                 rule.script.path,
                 st.state,
