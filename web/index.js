@@ -124,7 +124,7 @@
     var stS = React.useState(false);
     var saving = stS[0], setSaving = stS[1];
     var stT = React.useState({ channels: ["console"], items: [] });
-    var targets = stT[0];
+    var targets = stT[0], setTargets = stT[1];
 
     React.useEffect(function () {
       if (open) {
