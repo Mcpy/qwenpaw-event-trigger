@@ -271,6 +271,10 @@
                 return src.map(function (i) { return { value: i.session_id, label: i.session_id }; });
               })(),
               placeholder: "留空=独立会话;输入可搜索已有会话",
+              filterOption: function (input, option) {
+                if (!input) return true;
+                return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
+              },
               onChange: set("session_id") })),
           e("div", { style: { display: "flex", gap: 24 } },
             e(Space, { align: "center" }, e(Text, null, "静默(只跑不投)"), e(Switch, { checked: !!v.silent, onChange: set("silent") })),
