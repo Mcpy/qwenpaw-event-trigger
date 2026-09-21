@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .models import (
     ActionKind,
@@ -25,6 +26,8 @@ from .models import (
 from .protocol import ProtocolError, run_script
 
 logger = logging.getLogger("qwenpaw.event_trigger")
+
+_SCRIPT_ERRORS = (ProtocolError, subprocess.SubprocessError, TimeoutError, OSError)
 
 
 class Engine:
@@ -63,8 +66,7 @@ class Engine:
     # ---- rule mutations (called by manager/api) ----
 
     async def upsert_rule(self, rule: EventRule, *, audit_detail: str = "") -> None:
-        now = time.time()
-        rule.updated_at = now
+        rule.updated_at = time.time()
         existing = self._events.get(rule.id)
         if existing:
             self._events.rules.remove(existing)
@@ -80,7 +82,7 @@ class Engine:
         else:
             self._drop_task(rule.id)
 
-    async def set_enabled(self, rule_id: str, enabled: bool) -> Optional[EventRule]:
+    async def set_enabled(self, rule_id: str, enabled: bool):
         rule = self._events.get(rule_id)
         if not rule:
             return None
@@ -100,7 +102,7 @@ class Engine:
             self._drop_task(rule_id)
         return rule
 
-    async def delete_rule(self, rule_id: str) -> Optional[EventRule]:
+    async def delete_rule(self, rule_id: str):
         rule = self._events.get(rule_id)
         if not rule:
             return None
@@ -150,7 +152,7 @@ class Engine:
                 rule.runtime.script_timeout_seconds,
                 rule.script.content_hash,
             )
-        except (ProtocolError, subprocess_error()) as e:
+        except _SCRIPT_ERRORS as e:
             st.last_error = str(e)
             st.run_count += 1
             await self._repo.append_run(
@@ -224,10 +226,3 @@ class Engine:
             text=text,
             meta={"suppress_console_push": False},
         )
-
-
-def subprocess_error():
-    """Tuple of subprocess failure types (helper so engine imports stay small)."""
-    import subprocess
-    import TimeoutError as BuiltinTimeout
-    return (subprocess.SubprocessError, BuiltinTimeout, OSError)

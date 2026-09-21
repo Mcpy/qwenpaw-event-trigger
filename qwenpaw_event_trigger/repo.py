@@ -43,7 +43,9 @@ class Repo:
 
     async def save(self, events: EventsFile) -> None:
         async with self._lock:
-            await asyncio.to_thread(self._atomic_write, self.events_path, events.model_dump_json(indent=2))
+            await asyncio.to_thread(
+                self._atomic_write, self.events_path, events.model_dump_json(indent=2)
+            )
 
     @staticmethod
     def _atomic_write(path: str, content: str) -> None:

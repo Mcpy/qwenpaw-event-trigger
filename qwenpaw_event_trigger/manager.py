@@ -106,7 +106,9 @@ class RuleManager:
             warnings.append("validate-only: nothing persisted")
         return rule, warnings
 
-    async def update(self, rule: EventRule, script_content: Optional[str] = None) -> Tuple[EventRule, List[str]]:
+    async def update(
+        self, rule: EventRule, script_content: Optional[str] = None
+    ) -> Tuple[EventRule, List[str]]:
         old = self._engine.events.get(rule.id)
         if not old:
             raise RegistrationError(f"unknown rule: {rule.id}")

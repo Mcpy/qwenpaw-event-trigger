@@ -20,6 +20,15 @@ from .models import EventRule
 logger = logging.getLogger("qwenpaw.event_trigger")
 
 
+def _status_completed(status: Any) -> bool:
+    """Compare robustly: enum or string."""
+    if status is None:
+        return False
+    if status == "completed":
+        return True
+    return getattr(status, "value", None) == "completed"
+
+
 def _extract_text(event: Any) -> str:
     """Pull assistant text out of a completed message event."""
     try:
@@ -86,11 +95,7 @@ class InProcessInjector:
                 "source": "event-trigger",
                 "event_rule_id": rule.id,
                 # tool approval level follows cron's tool_safety semantics
-                **(
-                    {}
-                    if rt.tool_safety
-                    else {"approval_level": "off"}
-                ),
+                **({} if rt.tool_safety else {"approval_level": "off"}),
             },
         }
 
@@ -118,7 +123,7 @@ class InProcessInjector:
                 if rt.dispatch_mode == "final":
                     if (
                         getattr(event, "object", None) == "message"
-                        and getattr(event, "status", None) == "completed"
+                        and _status_completed(getattr(event, "status", None))
                     ):
                         final_event = event
                 # mode "stream": forward every event (v1 keeps final-only;

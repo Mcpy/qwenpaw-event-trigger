@@ -40,6 +40,44 @@ class RegisterBody(BaseModel):
     enabled: bool = True
 
 
+def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
+    from .models import (
+        ActionKind,
+        DispatchSpec,
+        EventRule,
+        PollSpec,
+        RuntimeSpec,
+        ScriptSpec,
+    )
+
+    script_path = body.script_path or (existing.script.path if existing else "")
+    return EventRule(
+        id=rule_id or (existing.id if existing else None) or None,
+        name=body.name,
+        agent_id=body.agent_id,
+        enabled=body.enabled,
+        poll=PollSpec(interval_seconds=body.interval_seconds),
+        script=ScriptSpec(path=script_path, interpreter=body.interpreter),
+        action=ActionKind(body.action),
+        prompt_template=body.prompt_template,
+        notify_template=body.notify_template,
+        dispatch=DispatchSpec(
+            channel=body.channel,
+            user_id=body.user_id,
+            session_id=body.session_id,
+        ),
+        runtime=RuntimeSpec(
+            timeout_seconds=body.timeout_seconds,
+            script_timeout_seconds=body.script_timeout_seconds,
+            cooldown_seconds=body.cooldown_seconds,
+            share_session=body.share_session,
+            tool_safety=body.tool_safety,
+            dispatch_mode=body.dispatch_mode,
+            silent=body.silent,
+        ),
+    )
+
+
 def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
     router = APIRouter(prefix="/events", tags=["event-trigger"])
 
@@ -47,100 +85,34 @@ def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
     async def protocol():
         return {"protocol": PROTOCOL_DOC}
 
+    @router.get("/audit/recent")
+    async def audit(limit: int = 50):
+        return {"audit": await repo.recent_audit(limit=min(limit, 500))}
+
     @router.get("/")
     async def list_rules():
         return {"rules": manager.describe()}
 
     @router.post("/")
     async def register_rule(body: RegisterBody, validate_only: bool = False):
-        from .models import (
-            ActionKind,
-            DispatchSpec,
-            EventRule,
-            PollSpec,
-            RuntimeSpec,
-            ScriptSpec,
-        )
-
         if not body.script_path and not body.script_content:
             raise HTTPException(400, "script_path or script_content required")
+        rule = _rule_from_body(None, body)
         try:
-            rule = EventRule(
-                name=body.name,
-                agent_id=body.agent_id,
-                enabled=body.enabled,
-                poll=PollSpec(interval_seconds=body.interval_seconds),
-                script=ScriptSpec(
-                    path=body.script_path or "", interpreter=body.interpreter
-                ),
-                action=ActionKind(body.action),
-                prompt_template=body.prompt_template,
-                notify_template=body.notify_template,
-                dispatch=DispatchSpec(
-                    channel=body.channel,
-                    user_id=body.user_id,
-                    session_id=body.session_id,
-                ),
-                runtime=RuntimeSpec(
-                    timeout_seconds=body.timeout_seconds,
-                    script_timeout_seconds=body.script_timeout_seconds,
-                    cooldown_seconds=body.cooldown_seconds,
-                    share_session=body.share_session,
-                    tool_safety=body.tool_safety,
-                    dispatch_mode=body.dispatch_mode,
-                    silent=body.silent,
-                ),
-            )
             rule, warnings = await manager.register(
                 rule, body.script_content, validate_only=validate_only
             )
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
-        return {"rule": manager.describe()[-1], "warnings": warnings}
+        return {"rule_id": rule.id, "warnings": warnings, "rules": manager.describe()}
 
     @router.put("/{rule_id}")
     async def update_rule(rule_id: str, body: RegisterBody):
-        from .models import (
-            ActionKind,
-            DispatchSpec,
-            EventRule,
-            PollSpec,
-            RuntimeSpec,
-            ScriptSpec,
-        )
-
         existing = manager.events.get(rule_id)
         if not existing:
             raise HTTPException(404, f"unknown rule: {rule_id}")
+        rule = _rule_from_body(rule_id, body, existing)
         try:
-            rule = EventRule(
-                id=rule_id,
-                name=body.name,
-                agent_id=body.agent_id,
-                enabled=body.enabled,
-                poll=PollSpec(interval_seconds=body.interval_seconds),
-                script=ScriptSpec(
-                    path=body.script_path or existing.script.path,
-                    interpreter=body.interpreter,
-                ),
-                action=ActionKind(body.action),
-                prompt_template=body.prompt_template,
-                notify_template=body.notify_template,
-                dispatch=DispatchSpec(
-                    channel=body.channel,
-                    user_id=body.user_id,
-                    session_id=body.session_id,
-                ),
-                runtime=RuntimeSpec(
-                    timeout_seconds=body.timeout_seconds,
-                    script_timeout_seconds=body.script_timeout_seconds,
-                    cooldown_seconds=body.cooldown_seconds,
-                    share_session=body.share_session,
-                    tool_safety=body.tool_safety,
-                    dispatch_mode=body.dispatch_mode,
-                    silent=body.silent,
-                ),
-            )
             rule, warnings = await manager.update(rule, body.script_content)
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
@@ -180,9 +152,5 @@ def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
     @router.get("/{rule_id}/runs")
     async def runs(rule_id: str, limit: int = 50):
         return {"runs": await repo.recent_runs(rule_id, limit=min(limit, 500))}
-
-    @router.get("/audit/recent")
-    async def audit(limit: int = 50):
-        return {"audit": await repo.recent_audit(limit=min(limit, 500))}
 
     return router
