@@ -387,7 +387,11 @@
     );
   }
 
-  var BoltIcon = (H.antdIcons && H.antdIcons.BoltOutlined) ? H.antdIcons.BoltOutlined : "⚡";
+  // antd official BoltOutlined path — currentColor + outlined style matches sibling menus
+  var BoltIcon = e("svg", {
+    viewBox: "64 64 896 896", width: "1em", height: "1em",
+    fill: "currentColor", "aria-hidden": "true", focusable: "false"
+  }, e("path", { d: "M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-198 249.5c-4.1 5.3-.4 13 6.3 13h382.9c2.8 0 5.5-1.5 6.9-4l259.4-434.5c3.2-5.2-.6-12.2-6.8-12.2z" }));
   window.QwenPaw.menu.add(P, {
     id: "event-trigger.menu", label: "事件任务", route: "event-trigger.home",
     icon: BoltIcon, location: "primary.agentScoped", order: 60
