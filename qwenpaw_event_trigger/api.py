@@ -79,7 +79,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
 
 
 def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
-    router = APIRouter(prefix="/events", tags=["event-trigger"])
+    router = APIRouter(tags=["event-trigger"])  # mounted under /api/events via register_http_router
 
     @router.get("/protocol")
     async def protocol():
