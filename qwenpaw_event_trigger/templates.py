@@ -8,27 +8,30 @@ substituted client-side before registration.
 
 TEMPLATES = [
     {
-        "id": "btc",
-        "name": "BTC 阈值监控(滞回)",
+        "id": "stock",
+        "name": "股价阈值监控(滞回)",
         "params": [
-            {"k": "__SYMBOL__", "d": "BTCUSDT", "label": "交易对"},
-            {"k": "__THRESHOLD__", "d": "100000", "label": "触发阈值"},
+            {"k": "__TICKER__", "d": "NVDA", "label": "股票代码(如 NVDA、AAPL、TSLA)"},
+            {"k": "__THRESHOLD__", "d": "200", "label": "触发阈值"},
             {"k": "__RELEASE_PCT__", "d": "0.98", "label": "重武装比例(0.98=回踩2%)"},
         ],
         "script": '''#!/usr/bin/env python3
 import json, os, urllib.request
 
-SYMBOL = "__SYMBOL__"
+TICKER = "__TICKER__"
 THRESHOLD = float("__THRESHOLD__")
 RELEASE = THRESHOLD * float("__RELEASE_PCT__")
 
 state = json.loads(os.environ.get("EVENT_STATE") or "{}")
 armed = bool(state.get("armed", True))
-with urllib.request.urlopen("https://api.binance.com/api/v3/ticker/price?symbol=" + SYMBOL, timeout=10) as r:
-    price = float(json.load(r)["price"])
+url = "https://query1.finance.yahoo.com/v8/finance/chart/" + TICKER + "?interval=1d&range=1d"
+req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+with urllib.request.urlopen(req, timeout=10) as r:
+    meta = json.load(r)["chart"]["result"][0]["meta"]
+price = float(meta["regularMarketPrice"])
 
 if armed and price >= THRESHOLD:
-    print(json.dumps({"triggered": True, "title": SYMBOL + " 突破 " + str(THRESHOLD), "event": SYMBOL + " 现价 " + str(price) + ",已突破阈值。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": TICKER + " 突破 " + str(THRESHOLD), "event": TICKER + " 现价 " + str(price) + " USD,已突破阈值 " + str(THRESHOLD) + "。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
 elif (not armed) and price <= RELEASE:
     print(json.dumps({"triggered": False, "state": {"armed": True, "last_price": price}}, ensure_ascii=False))
 else:

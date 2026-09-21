@@ -45,13 +45,13 @@
   /* ================= demo templates ================= */
   var TEMPLATES = [
     {
-      id: "btc", name: "BTC 阈值监控(滞回)",
+      id: "stock", name: "股价阈值监控(滞回)",
       params: [
-        { k: "__SYMBOL__", d: "BTCUSDT", label: "交易对" },
-        { k: "__THRESHOLD__", d: "100000", label: "触发阈值" },
+        { k: "__TICKER__", d: "NVDA", label: "股票代码(如 NVDA、AAPL、TSLA)" },
+        { k: "__THRESHOLD__", d: "200", label: "触发阈值" },
         { k: "__RELEASE_PCT__", d: "0.98", label: "重武装比例(0.98=回踩2%)" }
       ],
-      script: '#!/usr/bin/env python3\nimport json, os, urllib.request\n\nSYMBOL = "__SYMBOL__"\nTHRESHOLD = float("__THRESHOLD__")\nRELEASE = THRESHOLD * float("__RELEASE_PCT__")\n\nstate = json.loads(os.environ.get("EVENT_STATE") or "{}")\narmed = bool(state.get("armed", True))\nwith urllib.request.urlopen("https://api.binance.com/api/v3/ticker/price?symbol=" + SYMBOL, timeout=10) as r:\n    price = float(json.load(r)["price"])\n\nif armed and price >= THRESHOLD:\n    print(json.dumps({"triggered": True, "title": SYMBOL + " 突破 " + str(THRESHOLD), "event": SYMBOL + " 现价 " + str(price) + ",已突破阈值。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))\nelif (not armed) and price <= RELEASE:\n    print(json.dumps({"triggered": False, "state": {"armed": True, "last_price": price}}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False, "state": {"armed": armed, "last_price": price}}, ensure_ascii=False))\n'
+      script: '#!/usr/bin/env python3\nimport json, os, urllib.request\n\nTICKER = "__TICKER__"\nTHRESHOLD = float("__THRESHOLD__")\nRELEASE = THRESHOLD * float("__RELEASE_PCT__")\n\nstate = json.loads(os.environ.get("EVENT_STATE") or "{}")\narmed = bool(state.get("armed", True))\nurl = "https://query1.finance.yahoo.com/v8/finance/chart/" + TICKER + "?interval=1d&range=1d"\nreq = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})\nwith urllib.request.urlopen(req, timeout=10) as r:\n    meta = json.load(r)["chart"]["result"][0]["meta"]\nprice = float(meta["regularMarketPrice"])\n\nif armed and price >= THRESHOLD:\n    print(json.dumps({"triggered": True, "title": TICKER + " 突破 " + str(THRESHOLD), "event": TICKER + " 现价 " + str(price) + " USD,已突破阈值 " + str(THRESHOLD) + "。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))\nelif (not armed) and price <= RELEASE:\n    print(json.dumps({"triggered": False, "state": {"armed": True, "last_price": price}}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False, "state": {"armed": armed, "last_price": price}}, ensure_ascii=False))\n'
     },
     {
       id: "http", name: "HTTP 探测(非2xx/超时触发)",
@@ -117,7 +117,7 @@
     var v = st[0], setV = st[1];
     var stSrc = React.useState("template");
     var source = stSrc[0], setSource = stSrc[1];
-    var stTpl = React.useState("btc");
+    var stTpl = React.useState("stock");
     var tplId = stTpl[0], setTplId = stTpl[1];
     var stP = React.useState({});
     var pv = stP[0], setPv = stP[1];
@@ -253,7 +253,7 @@
           e(Input, { value: editing.id, disabled: true })) : null,
 
         fi("任务名称", TOOLTIPS.name, true,
-          e(Input, { value: v.name || "", placeholder: "例如:BTC 突破监控", onChange: function (ev) { set("name")(ev.target.value); } })),
+          e(Input, { value: v.name || "", placeholder: "例如:英伟达突破监控", onChange: function (ev) { set("name")(ev.target.value); } })),
 
         fi("启用状态", TOOLTIPS.enabled, false,
           e(Switch, { checked: v.enabled !== false, onChange: set("enabled") })),
