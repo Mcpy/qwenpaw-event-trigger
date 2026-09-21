@@ -13,7 +13,7 @@
       Select = antd.Select, Drawer = antd.Drawer, Tabs = antd.Tabs, Space = antd.Space,
       Popconfirm = antd.Popconfirm, message = antd.message,
       Typography = antd.Typography, Radio = antd.Radio, Alert = antd.Alert,
-      Badge = antd.Badge;
+      Badge = antd.Badge, AutoComplete = antd.AutoComplete;
   var TextArea = Input.TextArea;
   var Text = Typography.Text;
 
@@ -116,11 +116,14 @@
     var stS = React.useState(false);
     var setSaving = stS[1];
     var saving = stS[0];
+    var stT = React.useState({ channels: ["console"], items: [] });
+    var targets = stT[0], setTargets = stT[1];
 
     React.useEffect(function () {
       if (open) {
         setSource(editing ? "path" : "template");
         setPv({});
+        api("/dispatch-targets").then(function (d) { setTargets(d); }).catch(function () {});
         setV(editing ? {
           name: editing.name, enabled: editing.enabled,
           interval: editing.interval_seconds, action: editing.action,
@@ -243,11 +246,32 @@
         e("div", { style: { marginTop: 8 } },
           field("notify 模板({title} {event})", v.notify_template, set("notify_template"), { rows: 2, ph: "Event: [{title}] {event}" }),
           field("agent prompt 模板({title} {event})", v.prompt_template, set("prompt_template"), { rows: 2, ph: "Event fired: [{title}] {event}" }),
-          e("div", { style: { display: "flex", gap: 8 } },
-            e("div", { style: { flex: 1 } }, field("频道", v.channel, set("channel"))),
-            e("div", { style: { flex: 1 } }, field("用户ID", v.user_id, set("user_id"))),
-            e("div", { style: { flex: 1 } }, field("会话ID(空=独立)", v.session_id, set("session_id")))
-          ),
+          e("div", { style: { marginBottom: 8 } },
+            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标频道"),
+            e(Select, { style: { width: "100%" }, value: v.channel || "console", showSearch: true,
+              options: (targets.channels || ["console"]).map(function (c) { return { value: c, label: c }; }),
+              onChange: set("channel") })),
+          e("div", { style: { marginBottom: 8 } },
+            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标用户ID"),
+            e(Select, { style: { width: "100%" }, value: v.user_id || "default", showSearch: true,
+              options: (function () {
+                var src = targets.items || [];
+                if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
+                var seen = {}, out = [];
+                src.forEach(function (i) { if (!seen[i.user_id]) { seen[i.user_id] = 1; out.push({ value: i.user_id, label: i.user_id }); } });
+                return out;
+              })(),
+              onChange: set("user_id") })),
+          e("div", { style: { marginBottom: 8 } },
+            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标会话ID(空=独立会话)"),
+            e(AutoComplete, { style: { width: "100%" }, value: v.session_id || "",
+              options: (function () {
+                var src = targets.items || [];
+                if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
+                return src.map(function (i) { return { value: i.session_id, label: i.session_id }; });
+              })(),
+              placeholder: "留空=独立会话;输入可搜索已有会话",
+              onChange: set("session_id") })),
           e("div", { style: { display: "flex", gap: 24 } },
             e(Space, { align: "center" }, e(Text, null, "静默(只跑不投)"), e(Switch, { checked: !!v.silent, onChange: set("silent") })),
             e(Space, { align: "center" }, e(Text, null, "工具自动审批"), e(Switch, { checked: v.tool_safety !== false, onChange: set("tool_safety") }))

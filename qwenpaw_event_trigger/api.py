@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .manager import RegistrationError, RuleManager
@@ -82,8 +82,48 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
     return EventRule(**kwargs)
 
 
-def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
+def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
     router = APIRouter(tags=["event-trigger"])  # mounted under /api/events via register_http_router
+
+    @router.get("/dispatch-targets")
+    async def dispatch_targets(request: Request, channel: Optional[str] = None, limit: int = 500):
+        """Candidate dispatch targets derived from known chats (cron parity).
+
+        The console form fills its channel / user / session dropdowns from this.
+        """
+        ws = None
+        try:
+            from qwenpaw.app.agent_context import get_agent_for_request
+            ws = await get_agent_for_request(request)
+        except Exception:
+            ws = None
+        if ws is None and injector is not None:
+            try:
+                ws = injector._workspace("default")
+            except Exception:
+                ws = None
+        cm = getattr(ws, "chat_manager", None) if ws is not None else None
+        if cm is None:
+            return {"channels": ["console"], "items": []}
+
+        chats = await cm.list_chats(channel=channel)
+        deduped = {}
+        for chat in chats:
+            key = (chat.channel, chat.user_id, chat.session_id)
+            if key not in deduped:
+                deduped[key] = {
+                    "channel": chat.channel,
+                    "user_id": chat.user_id,
+                    "session_id": chat.session_id,
+                }
+            if len(deduped) >= max(1, min(limit, 2000)):
+                break
+        items = list(deduped.values())
+        channels = sorted({i["channel"] for i in items})
+        if "console" not in channels:
+            channels.insert(0, "console")
+        return {"channels": channels, "items": items}
+
 
     @router.get("/protocol")
     async def protocol():
