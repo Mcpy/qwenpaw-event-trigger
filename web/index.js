@@ -387,9 +387,10 @@
     );
   }
 
+  var BoltIcon = (H.antdIcons && H.antdIcons.BoltOutlined) ? H.antdIcons.BoltOutlined : "⚡";
   window.QwenPaw.menu.add(P, {
-    id: "event-trigger.menu", label: "事件触发", route: "event-trigger.home",
-    location: "primary.agentScoped", order: 60
+    id: "event-trigger.menu", label: "事件任务", route: "event-trigger.home",
+    icon: BoltIcon, location: "primary.agentScoped", order: 60
   });
   window.QwenPaw.route.add(P, {
     id: "event-trigger.home", path: "/event-trigger", component: RulesPage
