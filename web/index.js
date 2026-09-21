@@ -263,19 +263,20 @@
               })(),
               onChange: set("user_id") })),
           e("div", { style: { marginBottom: 8 } },
-            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标会话ID(空=独立会话)"),
-            e(AutoComplete, { style: { width: "100%" }, value: v.session_id || "",
+            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标会话ID(留空=独立会话)"),
+            e(Select, { style: { width: "100%" }, value: v.session_id || undefined,
+              showSearch: true, allowClear: true,
+              placeholder: "留空=独立会话;可搜索选择已有会话",
+              filterOption: function (input, option) {
+                if (!input) return true;
+                return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
+              },
               options: (function () {
                 var src = targets.items || [];
                 if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
                 return src.map(function (i) { return { value: i.session_id, label: i.session_id }; });
               })(),
-              placeholder: "留空=独立会话;输入可搜索已有会话",
-              filterOption: function (input, option) {
-                if (!input) return true;
-                return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
-              },
-              onChange: set("session_id") })),
+              onChange: function (val) { set("session_id")(val || null); } })),
           e("div", { style: { display: "flex", gap: 24 } },
             e(Space, { align: "center" }, e(Text, null, "静默(只跑不投)"), e(Switch, { checked: !!v.silent, onChange: set("silent") })),
             e(Space, { align: "center" }, e(Text, null, "工具自动审批"), e(Switch, { checked: v.tool_safety !== false, onChange: set("tool_safety") }))
