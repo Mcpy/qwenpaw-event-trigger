@@ -217,9 +217,13 @@ class Engine:
             )
 
     async def _notify(self, rule: EventRule, text: str) -> None:
-        if self._channel_manager is None:
-            raise RuntimeError("channel_manager not attached")
-        await self._channel_manager.send_text(
+        # per-workspace resolution, same as agent action — no engine-level handle
+        cm = self._injector.channel_manager_for(rule.agent_id)
+        if cm is None:
+            raise RuntimeError(
+                f"channel_manager unavailable for agent '{rule.agent_id}'"
+            )
+        await cm.send_text(
             channel=rule.dispatch.channel,
             user_id=rule.dispatch.user_id,
             session_id=rule.dispatch.session_id or f"event:{rule.id}",

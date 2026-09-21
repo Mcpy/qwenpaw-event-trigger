@@ -66,6 +66,10 @@ class InProcessInjector:
     def _channel_manager(self, ws: Any) -> Any:
         return ws._service_manager.services.get("channel_manager")
 
+    def channel_manager_for(self, agent_id: str) -> Any:
+        """Per-workspace channel manager (used by engine notify action too)."""
+        return self._channel_manager(self._workspace(agent_id))
+
     def _session_id(self, rule: EventRule) -> str:
         d = rule.dispatch
         target = d.session_id
