@@ -51,8 +51,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
     )
 
     script_path = body.script_path or (existing.script.path if existing else "")
-    return EventRule(
-        id=rule_id or (existing.id if existing else None) or None,
+    kwargs: dict = dict(
         name=body.name,
         agent_id=body.agent_id,
         enabled=body.enabled,
@@ -76,6 +75,11 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
             silent=body.silent,
         ),
     )
+    if rule_id:
+        kwargs["id"] = rule_id
+    elif existing:
+        kwargs["id"] = existing.id  # omit otherwise -> default_factory generates
+    return EventRule(**kwargs)
 
 
 def build_router(manager: RuleManager, repo: Repo) -> APIRouter:
