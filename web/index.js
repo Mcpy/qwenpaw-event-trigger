@@ -130,7 +130,8 @@
       if (open) {
         setSource(editing ? "path" : "template");
         setPv({});
-        api("/dispatch-targets").then(function (d) { setTargets(d); }).catch(function () {});
+        api("/dispatch-targets").then(function (d) { setTargets(d); })
+          .catch(function (err) { message.error("投递目标加载失败: " + String(err.message || err).slice(0, 150)); });
         var rt = (editing && editing.runtime) || {};
         setV(editing ? {
           name: editing.name, enabled: editing.enabled,
@@ -143,16 +144,17 @@
           timeout: rt.timeout_seconds || 120,
           share_session: !!rt.share_session,
           tool_safety: !!rt.tool_safety,
-          dispatch_mode: rt.dispatch_mode || "final",
+          dispatch_mode: rt.dispatch_mode || "stream",
           silent: !!rt.silent,
+          inbox: rt.save_result_to_inbox !== false,
           prompt_template: "Event fired: [{title}] {event}",
           notify_template: "Event: [{title}] {event}"
         } : {
-          enabled: true, interval: 60, action: "agent",
+          enabled: false, interval: 60, action: "agent",
           channel: "console", user_id: "default", session_id: null,
           cooldown: 600, script_timeout: 60, timeout: 120,
           share_session: false, tool_safety: false,
-          dispatch_mode: "final", silent: false,
+          dispatch_mode: "stream", silent: false, inbox: true,
           prompt_template: "Event fired: [{title}] {event}",
           notify_template: "Event: [{title}] {event}"
         });
@@ -163,7 +165,7 @@
 
     function buildBody() {
       var body = {
-        name: v.name, agent_id: "default",
+        name: v.name, agent_id: (H.getSelectedAgentId && H.getSelectedAgentId()) || "default",
         interval_seconds: v.interval || 60,
         action: v.action || "agent",
         prompt_template: v.prompt_template || "Event fired: [{title}] {event}",
@@ -174,7 +176,8 @@
         timeout_seconds: v.timeout || 120,
         script_timeout_seconds: v.script_timeout || 60,
         share_session: !!v.share_session, tool_safety: !!v.tool_safety,
-        dispatch_mode: v.dispatch_mode || "final", silent: !!v.silent,
+        dispatch_mode: v.dispatch_mode || "stream", silent: !!v.silent,
+        save_result_to_inbox: v.inbox !== false,
         enabled: v.enabled !== false
       };
       if (source === "template" && !editing) {
@@ -254,6 +257,9 @@
 
         fi("启用状态", TOOLTIPS.enabled, false,
           e(Switch, { checked: v.enabled !== false, onChange: set("enabled") })),
+
+        fi("运行结果存进收件箱", "开启后,任务执行成功且投递成功时,会将结果写入收件箱;若投递失败,系统会自动兜底写入收件箱。", false,
+          e(Switch, { checked: v.inbox !== false, disabled: !isAgent, onChange: set("inbox") })),
 
         fi("检查器", TOOLTIPS.checker, true, checkerTabs),
         e("div", { style: { marginBottom: 14 } },

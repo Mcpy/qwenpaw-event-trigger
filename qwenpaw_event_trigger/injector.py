@@ -118,22 +118,82 @@ class InProcessInjector:
                 logger.debug("event-trigger: chat spec register failed", exc_info=True)
 
         final_event: Any = None
+        run_id: Optional[str] = None
+        baseline_count = 0
+
+        # inbox trace (cron parity): baseline -> create -> append delta -> finalize
+        if rt.save_result_to_inbox:
+            try:
+                from qwenpaw.app.inbox_trace_store import (
+                    create_trace,
+                    read_session_messages,
+                )
+                baseline = await read_session_messages(
+                    runner=ws,
+                    session_id=req["session_id"],
+                    user_id=req["user_id"],
+                    channel=rule.dispatch.channel,
+                )
+                baseline_count = len(baseline)
+                import uuid as _uuid
+                run_id = str(_uuid.uuid4())
+                await create_trace(run_id, meta={
+                    "task_type": "event",
+                    "rule_id": rule.id,
+                    "rule_name": rule.name,
+                    "dispatch_channel": rule.dispatch.channel,
+                    "target_user_id": rule.dispatch.user_id,
+                    "target_session_id": req["session_id"],
+                    "silent": rt.silent,
+                })
+            except Exception:
+                run_id = None
+                logger.debug("event-trigger: trace init failed", exc_info=True)
 
         async def _run() -> None:
             nonlocal final_event
             async for event in ws.stream_query(req):
                 if rt.silent:
                     continue
-                if rt.dispatch_mode == "final":
-                    if (
-                        getattr(event, "object", None) == "message"
-                        and _status_completed(getattr(event, "status", None))
-                    ):
-                        final_event = event
-                # mode "stream": forward every event (v1 keeps final-only;
-                # stream forwarding needs send_event parity — follow-up)
+                if rt.dispatch_mode == "stream":
+                    if cm is not None:
+                        await cm.send_event(
+                            channel=rule.dispatch.channel,
+                            user_id=rule.dispatch.user_id,
+                            session_id=rule.dispatch.session_id or req["session_id"],
+                            event=event,
+                            meta={"suppress_console_push": True},
+                        )
+                elif (
+                    getattr(event, "object", None) == "message"
+                    and _status_completed(getattr(event, "status", None))
+                ):
+                    final_event = event
 
-        await asyncio.wait_for(_run(), timeout=rt.timeout_seconds)
+        status = "success"
+        try:
+            await asyncio.wait_for(_run(), timeout=rt.timeout_seconds)
+        except asyncio.TimeoutError:
+            status = "timeout"
+            raise
+        finally:
+            if run_id:
+                try:
+                    from qwenpaw.app.inbox_trace_store import (
+                        append_trace_from_session_delta,
+                        finalize_trace,
+                    )
+                    await append_trace_from_session_delta(
+                        run_id=run_id,
+                        runner=ws,
+                        session_id=req["session_id"],
+                        user_id=req["user_id"],
+                        channel=rule.dispatch.channel,
+                        baseline_count=baseline_count,
+                    )
+                    await finalize_trace(run_id, status=status)
+                except Exception:
+                    logger.debug("event-trigger: trace finalize failed", exc_info=True)
 
         if rt.silent:
             return ""

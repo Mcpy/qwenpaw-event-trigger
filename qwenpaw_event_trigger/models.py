@@ -49,9 +49,9 @@ class RuntimeSpec(BaseModel):
     cooldown_seconds: int = Field(default=0, ge=0)         # suppress re-fire after a trigger
     share_session: bool = False          # False -> dedicated accumulating session (cron parity)
     tool_safety: bool = False            # True -> high-risk tools require approval (cron default: off)
-    dispatch_mode: Literal["stream", "final"] = "final"
+    dispatch_mode: Literal["stream", "final"] = "stream"
     silent: bool = False                 # consume stream, no channel delivery (cron parity)
-    save_result_to_inbox: Optional[bool] = None
+    save_result_to_inbox: bool = True    # write run result to inbox (cron default: on)
 
 
 class ScriptSpec(BaseModel):
@@ -63,7 +63,7 @@ class ScriptSpec(BaseModel):
 class EventRule(BaseModel):
     id: str = Field(default_factory=new_id)
     name: str
-    enabled: bool = True
+    enabled: bool = False   # cron parity: created disabled, user toggles on
     agent_id: str = "default"
 
     poll: PollSpec = Field(default_factory=PollSpec)

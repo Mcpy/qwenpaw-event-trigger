@@ -35,9 +35,10 @@ class RegisterBody(BaseModel):
     script_timeout_seconds: int = 60
     share_session: bool = False
     tool_safety: bool = False
-    dispatch_mode: str = "final"
+    dispatch_mode: str = "stream"
     silent: bool = False
-    enabled: bool = True
+    save_result_to_inbox: bool = True
+    enabled: bool = False
 
 
 def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
@@ -73,6 +74,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
             tool_safety=body.tool_safety,
             dispatch_mode=body.dispatch_mode,
             silent=body.silent,
+            save_result_to_inbox=body.save_result_to_inbox,
         ),
     )
     if rule_id:
