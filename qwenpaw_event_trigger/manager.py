@@ -76,7 +76,7 @@ class RuleManager:
 
         # 2. protocol dry-run — also initializes persisted state
         try:
-            out = await asyncio.to_thread(
+            out, _ = await asyncio.to_thread(
                 run_script,
                 path, {}, rule.id, rule.name,
                 rule.script.interpreter,
