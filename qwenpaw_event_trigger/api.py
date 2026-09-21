@@ -34,7 +34,7 @@ class RegisterBody(BaseModel):
     timeout_seconds: int = 120
     script_timeout_seconds: int = 60
     share_session: bool = False
-    tool_safety: bool = True
+    tool_safety: bool = False
     dispatch_mode: str = "final"
     silent: bool = False
     enabled: bool = True

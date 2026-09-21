@@ -1,5 +1,6 @@
-/* QwenPaw Event Trigger — frontend plugin (no-build, host-shared React/antd)
-   v2: controlled state only — no antd Form instance (crash fix: hooks-in-hook) */
+/* QwenPaw Event Trigger (事件任务) — frontend plugin
+   no-build, host-shared React/antd. Form spec mirrors cron JobDrawer:
+   vertical layout, required asterisks, per-field tooltips, cron naming. */
 (function () {
   "use strict";
   var H = window.QwenPaw.host;
@@ -11,15 +12,13 @@
   var Table = antd.Table, Tag = antd.Tag, Button = antd.Button, Switch = antd.Switch,
       Modal = antd.Modal, Input = antd.Input, InputNumber = antd.InputNumber,
       Select = antd.Select, Drawer = antd.Drawer, Tabs = antd.Tabs, Space = antd.Space,
-      Popconfirm = antd.Popconfirm, message = antd.message,
+      Popconfirm = antd.Popconfirm, message = antd.message, Tooltip = antd.Tooltip,
       Typography = antd.Typography, Radio = antd.Radio, Alert = antd.Alert,
-      Badge = antd.Badge, AutoComplete = antd.AutoComplete;
+      Badge = antd.Badge;
   var TextArea = Input.TextArea;
   var Text = Typography.Text;
 
   function api(p, opts) {
-    // host.fetch applies getApiUrl internally — pass the BUSINESS path only.
-    // (verified: getApiUrl("/events") fed into fetch produced /api/api/events)
     return H.fetch("/events" + p, opts).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
@@ -28,6 +27,20 @@
     });
   }
   function ts(v) { return v ? new Date(v * 1000).toLocaleString() : "—"; }
+
+  /* label with optional tooltip and required asterisk (cron parity) */
+  function lab(text, tip, required) {
+    return e("span", null,
+      text, " ",
+      required ? e("span", { style: { color: "#ff4d4f" }, title: "必填" }, "*") : null,
+      tip ? e(Tooltip, { title: tip },
+        e("span", { style: { cursor: "help", marginLeft: 4, opacity: 0.55, fontSize: 13 } }, "ⓘ")) : null);
+  }
+  function fi(label, tip, required, control) {
+    return e("div", { style: { marginBottom: 14 } },
+      e("div", { style: { marginBottom: 6 } }, lab(label, tip, required)),
+      control);
+  }
 
   /* ================= demo templates ================= */
   var TEMPLATES = [
@@ -79,30 +92,25 @@
     skipped: { color: "blue", text: "⏸ 冷却跳过" }
   };
 
-  /* ---------- small controlled input helpers ---------- */
-  function field(label, value, onChange, opts) {
-    opts = opts || {};
-    var input;
-    if (opts.rows) {
-      input = e(TextArea, { rows: opts.rows, value: value || "", placeholder: opts.ph || "",
-        onChange: function (ev) { onChange(ev.target.value); } });
-    } else if (opts.num) {
-      input = e(InputNumber, { min: opts.min, value: value, style: { width: opts.w || 120 },
-        onChange: function (v) { onChange(v); } });
-    } else if (opts.sw) {
-      input = e(Switch, { checked: !!value, onChange: function (v) { onChange(v); } });
-    } else {
-      input = e(Input, { value: value || "", placeholder: opts.ph || "",
-        onChange: function (ev) { onChange(ev.target.value); } });
-    }
-    return e("div", { key: label, style: { marginBottom: 8 } },
-      opts.inline ? input :
-      e("div", null,
-        e(Text, { type: "secondary", style: { fontSize: 12 } }, label),
-        input));
-  }
-
   /* ================= rule form modal ================= */
+  var TOOLTIPS = {
+    name: "任务的友好名称,便于识别。",
+    enabled: "关闭后停止检查,但保留任务配置。",
+    checker: "检查脚本按间隔轮询执行:读环境变量 EVENT_STATE(上次持久化状态),stdout 输出 JSON(必须含布尔 triggered,可带 title/event/cooldown/state)。保存时走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;之后修改脚本会被拒跑,需重新注册。",
+    taskType: "选择 'notify' 用于纯通知告警(不推理),选择 'agent' 触发智能体推理。",
+    notifyTpl: "固定消息模板,占位符 {title} {event} 会被脚本输出替换。",
+    requestInput: "填写希望智能体执行的任务,占位符 {title} {event} 会被脚本输出替换。",
+    dispatchChannel: "响应将发送到的目标频道(例如:'console'、'ntfy')。",
+    dispatchTargetUserId: "在目标频道中接收响应的用户ID。",
+    dispatchTargetSessionId: "在目标频道中传递响应的会话ID。留空时,本任务使用独立的累积会话(每次运行共享同一上下文,与其他会话隔离)。",
+    dispatchMode: "选择 'stream' 获取实时响应,或选择 'final' 仅获取完整响应。",
+    silentDelivery: "完整执行智能体任务并保留会话和追踪记录,但不向渠道发送结果。",
+    shareSession: "开启时,与目标用户共用会话。关闭时,本任务在独立会话中运行,互不影响。适用于不需要记忆历史的独立任务。默认:关闭",
+    toolSafety: "开启时,高风险工具调用需要用户审批(可能阻塞无人值守的事件任务)。关闭时,工具调用不再请求审批;文件防护规则仍然生效。默认:关闭",
+    id: "任务的唯一标识符,由系统在创建时自动分配,不可修改。",
+    cooldown: "触发后在此时间内不再重复触发,防止事件风暴。脚本也可通过输出 cooldown 字段覆盖。"
+  };
+
   function RuleFormModal(props) {
     var open = props.open, editing = props.editing, onClose = props.onClose, onSaved = props.onSaved;
     var st = React.useState({});
@@ -114,30 +122,37 @@
     var stP = React.useState({});
     var pv = stP[0], setPv = stP[1];
     var stS = React.useState(false);
-    var setSaving = stS[1];
-    var saving = stS[0];
+    var saving = stS[0], setSaving = stS[1];
     var stT = React.useState({ channels: ["console"], items: [] });
-    var targets = stT[0], setTargets = stT[1];
+    var targets = stT[0];
 
     React.useEffect(function () {
       if (open) {
         setSource(editing ? "path" : "template");
         setPv({});
         api("/dispatch-targets").then(function (d) { setTargets(d); }).catch(function () {});
+        var rt = (editing && editing.runtime) || {};
         setV(editing ? {
           name: editing.name, enabled: editing.enabled,
           interval: editing.interval_seconds, action: editing.action,
           channel: (editing.dispatch && editing.dispatch.channel) || "console",
           user_id: (editing.dispatch && editing.dispatch.user_id) || "default",
-          session_id: (editing.dispatch && editing.dispatch.session_id) || "",
+          session_id: (editing.dispatch && editing.dispatch.session_id) || null,
           cooldown: editing.cooldown_seconds,
-          script_timeout: 60, timeout: 120,
+          script_timeout: rt.script_timeout_seconds || 60,
+          timeout: rt.timeout_seconds || 120,
+          share_session: !!rt.share_session,
+          tool_safety: !!rt.tool_safety,
+          dispatch_mode: rt.dispatch_mode || "final",
+          silent: !!rt.silent,
           prompt_template: "Event fired: [{title}] {event}",
           notify_template: "Event: [{title}] {event}"
         } : {
           enabled: true, interval: 60, action: "agent",
-          channel: "console", user_id: "default", cooldown: 600,
-          script_timeout: 60, timeout: 120,
+          channel: "console", user_id: "default", session_id: null,
+          cooldown: 600, script_timeout: 60, timeout: 120,
+          share_session: false, tool_safety: false,
+          dispatch_mode: "final", silent: false,
           prompt_template: "Event fired: [{title}] {event}",
           notify_template: "Event: [{title}] {event}"
         });
@@ -151,15 +166,15 @@
         name: v.name, agent_id: "default",
         interval_seconds: v.interval || 60,
         action: v.action || "agent",
-        prompt_template: v.prompt_template,
-        notify_template: v.notify_template,
+        prompt_template: v.prompt_template || "Event fired: [{title}] {event}",
+        notify_template: v.notify_template || "Event: [{title}] {event}",
         channel: v.channel || "console", user_id: v.user_id || "default",
         session_id: v.session_id || null,
         cooldown_seconds: v.cooldown === undefined || v.cooldown === null ? 600 : v.cooldown,
         timeout_seconds: v.timeout || 120,
         script_timeout_seconds: v.script_timeout || 60,
-        share_session: false, tool_safety: v.tool_safety !== false,
-        dispatch_mode: "final", silent: false,
+        share_session: !!v.share_session, tool_safety: !!v.tool_safety,
+        dispatch_mode: v.dispatch_mode || "final", silent: !!v.silent,
         enabled: v.enabled !== false
       };
       if (source === "template" && !editing) {
@@ -179,7 +194,7 @@
     }
 
     function submit(validateOnly) {
-      if (!v.name) { message.error("名称必填"); return; }
+      if (!v.name) { message.error("请输入任务名称"); return; }
       if (source === "paste" && !(v.script_content || "").trim()) { message.error("请粘贴脚本内容"); return; }
       if (source === "path" && !(v.script_path || "").trim()) { message.error("请填写脚本路径"); return; }
       setSaving(true);
@@ -198,6 +213,8 @@
     if (!open) return null;
 
     var curTpl = TEMPLATES.find(function (t) { return t.id === tplId; }) || TEMPLATES[0];
+    var isAgent = v.action === "agent";
+
     var checkerTabs = e(Tabs, {
       activeKey: source, onChange: setSource, size: "small",
       items: [
@@ -224,72 +241,88 @@
     });
 
     return e(Modal, {
-      open: open, title: editing ? "编辑任务(热更新)" : "创建事件任务",
+      open: open, title: editing ? "编辑事件任务(热更新)" : "创建事件任务",
       width: 640, onCancel: onClose, footer: null, destroyOnClose: true,
     },
       e("div", { style: { maxHeight: "62vh", overflow: "auto", paddingRight: 4 } },
-        e("div", { style: { fontWeight: 600, margin: "4px 0 8px" } }, "① 基本信息"),
-        e("div", { style: { display: "flex", gap: 12, alignItems: "center" } },
-          e("div", { style: { flex: 1 } }, field("名称", v.name, set("name"))),
-          e(Space, { align: "center" }, e(Text, null, "启用"), e(Switch, { checked: v.enabled !== false, onChange: set("enabled") }))
+
+        editing ? fi("任务ID", TOOLTIPS.id, false,
+          e(Input, { value: editing.id, disabled: true })) : null,
+
+        fi("任务名称", TOOLTIPS.name, true,
+          e(Input, { value: v.name || "", placeholder: "例如:BTC 突破监控", onChange: function (ev) { set("name")(ev.target.value); } })),
+
+        fi("启用状态", TOOLTIPS.enabled, false,
+          e(Switch, { checked: v.enabled !== false, onChange: set("enabled") })),
+
+        fi("检查器", TOOLTIPS.checker, true, checkerTabs),
+        e("div", { style: { marginBottom: 14 } },
+          e("div", { style: { marginBottom: 6 } }, lab("检查间隔(秒,≥10)", null, true)),
+          e(InputNumber, { min: 10, value: v.interval, style: { width: 140 }, onChange: set("interval") })),
+
+        fi("任务类型", TOOLTIPS.taskType, true,
+          e(Radio.Group, { value: v.action, onChange: function (ev) { set("action")(ev.target.value); } },
+            e(Radio.Button, { value: "notify" }, "通知(不推理)"),
+            e(Radio.Button, { value: "agent" }, "Agent 推理"))),
+
+        isAgent
+          ? fi("请求内容", TOOLTIPS.requestInput, true,
+              e(TextArea, { rows: 2, value: v.prompt_template || "", onChange: function (ev) { set("prompt_template")(ev.target.value); } }))
+          : fi("通知内容", TOOLTIPS.notifyTpl, true,
+              e(TextArea, { rows: 2, value: v.notify_template || "", onChange: function (ev) { set("notify_template")(ev.target.value); } })),
+
+        fi("目标频道", TOOLTIPS.dispatchChannel, true,
+          e(Select, { style: { width: "100%" }, value: v.channel || "console", showSearch: true,
+            options: (targets.channels || ["console"]).map(function (c) { return { value: c, label: c }; }),
+            onChange: set("channel") })),
+
+        fi("目标用户ID", TOOLTIPS.dispatchTargetUserId, true,
+          e(Select, { style: { width: "100%" }, value: v.user_id || "default", showSearch: true,
+            options: (function () {
+              var src = targets.items || [];
+              if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
+              var seen = {}, out = [];
+              src.forEach(function (i) { if (!seen[i.user_id]) { seen[i.user_id] = 1; out.push({ value: i.user_id, label: i.user_id }); } });
+              return out;
+            })(),
+            onChange: set("user_id") })),
+
+        fi("目标会话ID", TOOLTIPS.dispatchTargetSessionId, false,
+          e(Select, { style: { width: "100%" }, value: v.session_id || undefined,
+            showSearch: true, allowClear: true,
+            placeholder: "留空=独立会话;可搜索选择已有会话",
+            filterOption: function (input, option) {
+              if (!input) return true;
+              return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
+            },
+            options: (function () {
+              var src = targets.items || [];
+              if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
+              return src.map(function (i) { return { value: i.session_id, label: i.session_id }; });
+            })(),
+            onChange: function (val) { set("session_id")(val || null); } })),
+
+        isAgent ? fi("分发模式", TOOLTIPS.dispatchMode, false,
+          e(Select, { style: { width: 200 }, value: v.dispatch_mode || "final",
+            options: [{ value: "final", label: "final" }, { value: "stream", label: "stream" }],
+            onChange: set("dispatch_mode") })) : null,
+
+        fi("静默投递", TOOLTIPS.silentDelivery, false,
+          e(Switch, { checked: !!v.silent, disabled: !isAgent, onChange: set("silent") })),
+
+        fi("共用会话", TOOLTIPS.shareSession, false,
+          e(Switch, { checked: !!v.share_session, onChange: set("share_session") })),
+
+        fi("工具安全审批", TOOLTIPS.toolSafety, false,
+          e(Switch, { checked: !!v.tool_safety, onChange: set("tool_safety") })),
+
+        e("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 } },
+          e(Space, { align: "center" }, lab("冷却(秒)", TOOLTIPS.cooldown, false), e(InputNumber, { min: 0, value: v.cooldown, style: { width: 100 }, onChange: set("cooldown") })),
+          e(Space, { align: "center" }, e(Text, null, "脚本超时(秒)"), e(InputNumber, { min: 1, value: v.script_timeout, style: { width: 90 }, onChange: set("script_timeout") })),
+          e(Space, { align: "center" }, e(Text, null, "推理超时(秒)"), e(InputNumber, { min: 1, value: v.timeout, style: { width: 90 }, onChange: set("timeout") }))
         ),
-        e("div", { style: { fontWeight: 600, margin: "10px 0 4px" } }, "② 检查器"),
-        checkerTabs,
-        e("div", { style: { display: "flex", gap: 12, alignItems: "center", marginTop: 6 } },
-          e(Text, null, "检查间隔(秒,≥10)"),
-          e(InputNumber, { min: 10, value: v.interval, style: { width: 110 }, onChange: set("interval") })
-        ),
-        e("div", { style: { fontWeight: 600, margin: "10px 0 4px" } }, "③ 动作"),
-        e(Radio.Group, { value: v.action, onChange: function (ev) { set("action")(ev.target.value); } },
-          e(Radio.Button, { value: "notify" }, "通知(不推理)"),
-          e(Radio.Button, { value: "agent" }, "Agent 推理")),
-        e("div", { style: { marginTop: 8 } },
-          field("notify 模板({title} {event})", v.notify_template, set("notify_template"), { rows: 2, ph: "Event: [{title}] {event}" }),
-          field("agent prompt 模板({title} {event})", v.prompt_template, set("prompt_template"), { rows: 2, ph: "Event fired: [{title}] {event}" }),
-          e("div", { style: { marginBottom: 8 } },
-            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标频道"),
-            e(Select, { style: { width: "100%" }, value: v.channel || "console", showSearch: true,
-              options: (targets.channels || ["console"]).map(function (c) { return { value: c, label: c }; }),
-              onChange: set("channel") })),
-          e("div", { style: { marginBottom: 8 } },
-            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标用户ID"),
-            e(Select, { style: { width: "100%" }, value: v.user_id || "default", showSearch: true,
-              options: (function () {
-                var src = targets.items || [];
-                if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
-                var seen = {}, out = [];
-                src.forEach(function (i) { if (!seen[i.user_id]) { seen[i.user_id] = 1; out.push({ value: i.user_id, label: i.user_id }); } });
-                return out;
-              })(),
-              onChange: set("user_id") })),
-          e("div", { style: { marginBottom: 8 } },
-            e(Text, { type: "secondary", style: { fontSize: 12 } }, "目标会话ID(留空=独立会话)"),
-            e(Select, { style: { width: "100%" }, value: v.session_id || undefined,
-              showSearch: true, allowClear: true,
-              placeholder: "留空=独立会话;可搜索选择已有会话",
-              filterOption: function (input, option) {
-                if (!input) return true;
-                return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
-              },
-              options: (function () {
-                var src = targets.items || [];
-                if (v.channel) src = src.filter(function (i) { return i.channel === v.channel; });
-                return src.map(function (i) { return { value: i.session_id, label: i.session_id }; });
-              })(),
-              onChange: function (val) { set("session_id")(val || null); } })),
-          e("div", { style: { display: "flex", gap: 24 } },
-            e(Space, { align: "center" }, e(Text, null, "静默(只跑不投)"), e(Switch, { checked: !!v.silent, onChange: set("silent") })),
-            e(Space, { align: "center" }, e(Text, null, "工具自动审批"), e(Switch, { checked: v.tool_safety !== false, onChange: set("tool_safety") }))
-          )
-        ),
-        e("div", { style: { fontWeight: 600, margin: "10px 0 4px" } }, "④ 高级"),
-        e("div", { style: { display: "flex", gap: 16, flexWrap: "wrap" } },
-          e(Space, { align: "center" }, e(Text, null, "冷却(秒)"), e(InputNumber, { min: 0, value: v.cooldown, style: { width: 100 }, onChange: set("cooldown") })),
-          e(Space, { align: "center" }, e(Text, null, "脚本超时"), e(InputNumber, { min: 1, value: v.script_timeout, style: { width: 90 }, onChange: set("script_timeout") })),
-          e(Space, { align: "center" }, e(Text, null, "推理超时"), e(InputNumber, { min: 1, value: v.timeout, style: { width: 90 }, onChange: set("timeout") }))
-        ),
-        e(Alert, { style: { marginTop: 10 }, type: "info", showIcon: false,
-          message: "保存走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;改脚本即重新校验。" })
+
+        e(Alert, { style: { marginTop: 2 }, type: "info", showIcon: false, message: "保存走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;改脚本即重新校验。" })
       ),
       e("div", { style: { textAlign: "right", marginTop: 10 } },
         e(Space, null,
@@ -372,7 +405,7 @@
     }
 
     var columns = [
-      { title: "规则", dataIndex: "name",
+      { title: "任务", dataIndex: "name",
         render: function (v, r) {
           return e(Space, { direction: "vertical", size: 0 },
             e(Space, { size: 6 },
@@ -418,11 +451,11 @@
     );
   }
 
-  // antd official BoltOutlined path — currentColor + outlined style matches sibling menus
   var BoltIcon = e("svg", {
     viewBox: "64 64 896 896", width: "1em", height: "1em",
     fill: "currentColor", "aria-hidden": "true", focusable: "false"
   }, e("path", { d: "M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-198 249.5c-4.1 5.3-.4 13 6.3 13h382.9c2.8 0 5.5-1.5 6.9-4l259.4-434.5c3.2-5.2-.6-12.2-6.8-12.2z" }));
+
   window.QwenPaw.menu.add(P, {
     id: "event-trigger.menu", label: "事件任务", route: "event-trigger.home",
     icon: BoltIcon, location: "primary.agentScoped", order: 60
@@ -431,5 +464,5 @@
     id: "event-trigger.home", path: "/event-trigger", component: RulesPage
   });
 
-  console.log("[event-trigger] frontend registered (v3 double-prefix-fixed)");
+  console.log("[event-trigger] frontend registered (v4 cron-parity form)");
 })();

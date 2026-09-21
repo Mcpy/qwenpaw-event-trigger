@@ -151,6 +151,7 @@ class RuleManager:
                     "script": r.script.path,
                     "script_hash": r.script.content_hash[:12],
                     "dispatch": r.dispatch.model_dump(),
+                    "runtime": r.runtime.model_dump(),
                     "cooldown_seconds": r.runtime.cooldown_seconds,
                     "run_count": st.run_count,
                     "trigger_count": st.trigger_count,
