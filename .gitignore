@@ -1,0 +1,4 @@
+EVENT_TRIGGER_TODO.md
+__pycache__/
+*.pyc
+data/

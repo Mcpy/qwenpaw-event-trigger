@@ -1,0 +1,21 @@
+{
+  "id": "event-trigger",
+  "name": "Event Trigger",
+  "version": "0.1.0",
+  "type": "general",
+  "description": {
+    "en-US": "Condition-driven agent trigger engine: poll user scripts, fire agent reasoning or notify on events (the event-driven counterpart of cron jobs).",
+    "zh-CN": "条件驱动的事件触发引擎:轮询用户脚本,事件发生时触发 agent 推理或直接通知——定时任务的事件驱动孪生。"
+  },
+  "author": "Mcpy",
+  "entry": {
+    "backend": "plugin.py"
+  },
+  "dependencies": [],
+  "qwenpaw_version": {
+    "min": "2.1.0"
+  },
+  "meta": {
+    "keywords": ["events", "trigger", "automation", "monitor", "webhook"]
+  }
+}
