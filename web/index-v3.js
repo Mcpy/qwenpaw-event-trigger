@@ -394,5 +394,5 @@
     id: "event-trigger.home", path: "/event-trigger", component: RulesPage
   });
 
-  console.log("[event-trigger] frontend registered (v2 controlled-state)");
+  console.log("[event-trigger] frontend registered (v3 double-prefix-fixed)");
 })();
