@@ -52,6 +52,12 @@ Hysteresis skeleton and the full spec: `GET /api/events/protocol`; ready-made te
 
 Scripts run inside your local trust domain (equivalent to writing your own crontab) — no sandbox theater. What the engine prevents: **unregistered scripts running** (registry-only), **silent tampering** (SHA-256 lock + audit log), and **resource abuse** (timeout / output cap / interval floor). Community templates: read the source before use; market-listed ones go through platform scanning.
 
+## Roadmap
+
+- List on the official plugin market
+- CLI client (standalone `qwenpaw-event` pip package wrapping the REST API — the plugin system has no CLI extension point; cron's CLI is a built-in kernel subcommand)
+- Execution model selection (cron parity) · Webhook-type event sources
+
 ## License
 
 [MIT](./LICENSE)
