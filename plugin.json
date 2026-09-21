@@ -13,7 +13,7 @@
   "author": "Mcpy",
   "entry": {
     "backend": "plugin.py",
-    "frontend": "web/index.js"
+    "frontend": "web/index-v5.js"
   },
   "dependencies": [],
   "qwenpaw_version": {
