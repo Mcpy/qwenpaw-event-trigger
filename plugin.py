@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 from qwenpaw.constant import WORKING_DIR
 from qwenpaw.plugins.api import PluginApi
@@ -56,6 +57,11 @@ class EventTriggerPlugin:
         api.register_shutdown_hook(hook_name="event_trigger_stop", callback=_shutdown)
         api.register_http_router(
             build_router(manager, repo, injector=injector), prefix="/events"
+        )
+        api.register_skill_provider(
+            skills_dir=Path(__file__).parent / "skills",
+            enabled_by_default=True,
+            channels=["all"],
         )
         logger.info(
             "✓ event-trigger registered (data dir: %s, rules: %d)",
