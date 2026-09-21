@@ -221,7 +221,7 @@
     });
 
     return e(Modal, {
-      open: open, title: editing ? "编辑规则(热更新)" : "创建事件规则",
+      open: open, title: editing ? "编辑任务(热更新)" : "创建事件任务",
       width: 640, onCancel: onClose, footer: null, destroyOnClose: true,
     },
       e("div", { style: { maxHeight: "62vh", overflow: "auto", paddingRight: 4 } },
@@ -361,15 +361,17 @@
             e(Button, { size: "small", onClick: function () { runNow(r); } }, "▶ 执行"),
             e(Button, { size: "small", onClick: function () { setRunsRule(r); } }, "记录"),
             e(Button, { size: "small", type: "link", onClick: function () { setEditing(r); setModalOpen(true); } }, "编辑"),
-            e(Popconfirm, { title: "删除该规则?", onConfirm: function () { del(r); } },
+            e(Popconfirm, { title: "删除该任务?", onConfirm: function () { del(r); } },
               e(Button, { size: "small", type: "link", danger: true }, "删除")));
         } }
     ];
 
-    return e("div", { style: { padding: 20 } },
-      e("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 12 } },
-        e("h2", { style: { margin: 0 } }, "⚡ 事件触发"),
-        e(Button, { type: "primary", onClick: function () { setEditing(null); setModalOpen(true); } }, "+ 创建规则")),
+    return e("div", { style: { padding: "16px 24px" } },
+      e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
+        e("div", { style: { fontSize: 18, fontWeight: 600 } },
+          e(Text, { type: "secondary", style: { fontSize: 18, fontWeight: 600 } }, "控制 / "),
+          e("span", null, "事件任务")),
+        e(Button, { type: "primary", onClick: function () { setEditing(null); setModalOpen(true); } }, "+ 创建任务")),
       e(Table, {
         rowKey: "id", dataSource: rules, columns: columns, pagination: false,
         expandable: {
