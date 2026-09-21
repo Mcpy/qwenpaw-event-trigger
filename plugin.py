@@ -53,7 +53,7 @@ class EventTriggerPlugin:
                 loop.run_until_complete(engine.stop())
 
         api.register_startup_hook(hook_name="event_trigger_start", callback=_startup)
-        api.register_shutdown_hook(callback=_shutdown)
+        api.register_shutdown_hook(hook_name="event_trigger_stop", callback=_shutdown)
         api.register_http_router(build_router(manager, repo), prefix="/events")
         logger.info(
             "✓ event-trigger registered (data dir: %s, rules: %d)",
