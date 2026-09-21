@@ -127,6 +127,12 @@ def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
         return {"channels": channels, "items": items}
 
 
+    @router.get("/templates")
+    async def templates():
+        """Bundled checker-script templates (single source of truth)."""
+        from .templates import TEMPLATES
+        return {"templates": TEMPLATES}
+
     @router.get("/protocol")
     async def protocol():
         return {"protocol": PROTOCOL_DOC}

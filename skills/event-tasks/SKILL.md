@@ -101,6 +101,57 @@ else:
     print(json.dumps({"triggered": False, "state": {"armed": armed or reset_condition}}, ensure_ascii=False))
 ```
 
+## 脚本编写指南
+
+### 格式规格
+
+| 项 | 规格 |
+| --- | --- |
+| 语言 | Python 为主(平台 venv 的 python 执行,可 import 平台已有库);`interpreter` 字段可指定任意解释器 |
+| 输入 | 环境变量 `EVENT_STATE`(上次 state 的 JSON,首次 `{}`)、`EVENT_RULE_ID`、`EVENT_RULE_NAME` |
+| 输出 | stdout 一行 JSON:必须含布尔 `triggered`;可选 `title` / `event` / `cooldown`(秒,覆盖规则默认)/ `state`(持久化并回传) |
+| 退出码 | 0 = 正常(读 JSON 判定);非 0 = 脚本错误(记日志、不触发) |
+| 限制 | stdout ≤ 64KB;超时默认 60s(`script_timeout_seconds` 可调);间隔 ≥ 10s |
+| 纯通知任务的 event | `event` 字段即通知正文;agent 任务的 `event` 会填进 prompt 模板的 `{event}` |
+
+### 通用骨架(滞回模式,直接抄)
+
+```python
+#!/usr/bin/env python3
+import json, os
+
+st = json.loads(os.environ.get("EVENT_STATE") or "{}")
+armed = bool(st.get("armed", True))
+
+# --- 在这里写检查逻辑,得到两个布尔 ---
+should_fire = False    # 满足触发条件?
+reset_condition = False  # 满足复位(重新武装)条件?
+
+out = {"triggered": False, "state": dict(st)}
+if armed and should_fire:
+    out.update({
+        "triggered": True,
+        "title": "简短标题",
+        "event": "详细正文:发生了什么、关键数据。agent 任务会拿它作为推理输入。",
+        "state": {"armed": False},
+    })
+elif reset_condition:
+    out["state"] = {"armed": True}
+print(json.dumps(out, ensure_ascii=False))
+```
+
+### 编写规则
+
+1. **持续性条件必须滞回**:条件持续为真时,没有 armed 门会每个间隔触发一次(风暴)。触发即 `armed:false`,复位后才重新武装
+2. **一次性事件不要用 state 做标志**:注册时的试跑会真实执行一次并保存 state,一次性 latch 会被消耗;把一次性判断放在**事件源本身**(如"目标文件是否存在")
+3. **stdout 纪律**:调试信息别以 `{` 开头;引擎取最后一个可解析的 JSON 行
+4. **不要读引擎内部文件**:脚本与引擎只通过 `EVENT_STATE`(进)和 stdout(出)交互
+5. **外部请求设超时**:脚本有总超时,内部网络请求必须自带更短的 timeout
+
+### 现成模板
+
+`GET /api/events/templates` 返回 5 个内置模板(BTC 阈值滞回 / HTTP 探测 / 文件变化 / 端口存活 / 日志关键字),每个含 `params`(可调参数)和 `script` 全文。流程:取模板 → 替换 `__占位符__` → 作为 `script_content` POST 创建。控制台"从模板"tab 同源。
+
 ## 创建前的最少确认
 
 缺以下任一项,先问用户再创建:
