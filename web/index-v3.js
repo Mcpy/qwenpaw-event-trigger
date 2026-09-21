@@ -18,8 +18,9 @@
   var Text = Typography.Text;
 
   function api(p, opts) {
-    // getApiUrl prepends "/api" itself — pass the business path only
-    return H.fetch(H.getApiUrl("/events" + p), opts).then(function (r) {
+    // host.fetch applies getApiUrl internally — pass the BUSINESS path only.
+    // (verified: getApiUrl("/events") fed into fetch produced /api/api/events)
+    return H.fetch("/events" + p, opts).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
         return d;
