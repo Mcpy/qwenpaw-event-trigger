@@ -156,7 +156,10 @@
       if (open) {
         setSource(editing ? "path" : "template");
         setPv({});
-        api("/dispatch-targets").then(function (d) { setTargets(d); })
+        api("/dispatch-targets").then(function (d) {
+          // merge, never overwrite — /templates may have arrived first
+          setTargets(function (prev) { return Object.assign({}, prev, { channels: d.channels || ["console"], items: d.items || [] }); });
+        })
           .catch(function (err) { message.error(T("targetsFail") + String(err.message || err).slice(0, 150)); });
         api("/templates").then(function (d) { setTargets(function (prev) { return Object.assign({}, prev, { templates: d.templates || [] }); }); })
           .catch(function () {});
