@@ -1,6 +1,6 @@
-/* QwenPaw Event Trigger (事件任务) — frontend plugin
-   no-build, host-shared React/antd. Form spec mirrors cron JobDrawer:
-   vertical layout, required asterisks, per-field tooltips, cron naming. */
+/* QwenPaw Event Trigger (事件任务 / Event Tasks) — frontend plugin
+   no-build, host-shared React/antd. v5: full zh/en i18n via useLocale,
+   templates fetched from backend (single source of truth). */
 (function () {
   "use strict";
   var H = window.QwenPaw.host;
@@ -8,6 +8,7 @@
   var antd = H.antd;
   var e = React.createElement;
   var P = "event-trigger";
+  var NAV_LANG = (navigator.language || "zh").toLowerCase().indexOf("zh") === 0 ? "zh" : "en";
 
   var Table = antd.Table, Tag = antd.Tag, Button = antd.Button, Switch = antd.Switch,
       Modal = antd.Modal, Input = antd.Input, InputNumber = antd.InputNumber,
@@ -28,91 +29,116 @@
   }
   function ts(v) { return v ? new Date(v * 1000).toLocaleString() : "—"; }
 
-  /* label with optional tooltip and required asterisk (cron parity) */
-  function lab(text, tip, required) {
-    return e("span", null,
-      text, " ",
-      required ? e("span", { style: { color: "#ff4d4f" }, title: "必填" }, "*") : null,
-      tip ? e(Tooltip, { title: tip },
-        e("span", { style: { cursor: "help", marginLeft: 4, opacity: 0.55, fontSize: 13 } }, "ⓘ")) : null);
-  }
-  function fi(label, tip, required, control) {
-    return e("div", { style: { marginBottom: 14 } },
-      e("div", { style: { marginBottom: 6 } }, lab(label, tip, required)),
-      control);
-  }
-
-  /* ================= demo templates ================= */
-  var TEMPLATES = [
-    {
-      id: "stock", name: "股价阈值监控(滞回)",
-      params: [
-        { k: "__TICKER__", d: "NVDA", label: "股票代码(如 NVDA、AAPL、TSLA)" },
-        { k: "__THRESHOLD__", d: "200", label: "触发阈值" },
-        { k: "__RELEASE_PCT__", d: "0.98", label: "重武装比例(0.98=回踩2%)" }
-      ],
-      script: '#!/usr/bin/env python3\nimport json, os, urllib.request\n\nTICKER = "__TICKER__"\nTHRESHOLD = float("__THRESHOLD__")\nRELEASE = THRESHOLD * float("__RELEASE_PCT__")\n\nstate = json.loads(os.environ.get("EVENT_STATE") or "{}")\narmed = bool(state.get("armed", True))\nurl = "https://query1.finance.yahoo.com/v8/finance/chart/" + TICKER + "?interval=1d&range=1d"\nreq = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})\nwith urllib.request.urlopen(req, timeout=10) as r:\n    meta = json.load(r)["chart"]["result"][0]["meta"]\nprice = float(meta["regularMarketPrice"])\n\nif armed and price >= THRESHOLD:\n    print(json.dumps({"triggered": True, "title": TICKER + " 突破 " + str(THRESHOLD), "event": TICKER + " 现价 " + str(price) + " USD,已突破阈值 " + str(THRESHOLD) + "。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))\nelif (not armed) and price <= RELEASE:\n    print(json.dumps({"triggered": False, "state": {"armed": True, "last_price": price}}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False, "state": {"armed": armed, "last_price": price}}, ensure_ascii=False))\n'
+  /* ================= i18n ================= */
+  var L10N = {
+    zh: {
+      menu: "事件任务", crumb: "控制 / ", create: "+ 创建任务",
+      colTask: "任务", colInterval: "间隔", colCounters: "运行/触发", colLastRun: "上次运行",
+      colEnabled: "启用", colActions: "操作",
+      btnRun: "▶ 执行", btnRuns: "记录", btnEdit: "编辑", btnDelete: "删除",
+      runNowOk: "已执行一次检查", deleteConfirm: "删除该任务?",
+      modalCreate: "创建事件任务", modalEdit: "编辑事件任务(热更新)",
+      fId: "任务ID", fName: "任务名称", fEnabled: "启用状态", fInbox: "运行结果存进收件箱",
+      fChecker: "检查器", fInterval: "检查间隔(秒,≥10)", fTaskType: "任务类型",
+      fRequest: "请求内容", fNotify: "通知内容", fChannel: "目标频道",
+      fUser: "目标用户ID", fSession: "目标会话ID", fMode: "分发模式",
+      fSilent: "静默投递", fShare: "共用会话", fToolSafety: "工具安全审批",
+      fCooldown: "冷却(秒)", fScriptTimeout: "脚本超时(秒)", fTimeout: "推理超时(秒)",
+      actionNotify: "通知(不推理)", actionAgent: "Agent 推理",
+      srcTemplate: "从模板", srcPaste: "粘贴脚本", srcPath: "引用路径",
+      phName: "例如:英伟达突破监控", phPaste: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
+      phPath: "/abs/path/checker.py", phSession: "留空=独立会话;可搜索选择已有会话",
+      btnCancel: "取 消", btnValidate: "仅校验", btnSave: "保 存",
+      alertGate: "保存走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;改脚本即重新校验。",
+      drawerTitle: "执行记录:", showAll: "显示全部(含 检查/冷却跳过)", noRuns: "暂无记录",
+      saved: "已保存", validated: "校验通过", targetsFail: "投递目标加载失败: ",
+      nameRequired: "请输入任务名称", pasteRequired: "请粘贴脚本内容", pathRequired: "请填写脚本路径",
+      notify: "notify", agent: "agent",
+      expandedScript: "脚本: ", expandedDeliver: "投递: ", expandedCooldown: " · 冷却: ",
+      kindTrigger: "🔥 触发", kindError: "🔴 错误", kindCheck: "检查", kindSkipped: "⏸ 冷却跳过"
     },
-    {
-      id: "http", name: "HTTP 探测(非2xx/超时触发)",
-      params: [
-        { k: "__URL__", d: "https://example.com/health", label: "探测 URL" },
-        { k: "__TIMEOUT__", d: "10", label: "超时秒数" }
-      ],
-      script: '#!/usr/bin/env python3\nimport json, urllib.request\n\nURL = "__URL__"\ntry:\n    with urllib.request.urlopen(URL, timeout=__TIMEOUT__) as r:\n        code = r.status\nexcept Exception as exc:\n    print(json.dumps({"triggered": True, "title": "HTTP 探测失败", "event": URL + " 不可达: " + repr(exc)}, ensure_ascii=False))\n    raise SystemExit(0)\nif code >= 400:\n    print(json.dumps({"triggered": True, "title": "HTTP 状态异常", "event": URL + " 返回 " + str(code)}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False}, ensure_ascii=False))\n'
-    },
-    {
-      id: "file", name: "文件变化监测",
-      params: [{ k: "__PATH__", d: "/path/to/file", label: "文件路径" }],
-      script: '#!/usr/bin/env python3\nimport json, os\n\nPATH = "__PATH__"\nst = json.loads(os.environ.get("EVENT_STATE") or "{}")\ntry:\n    s = os.stat(PATH)\n    fp = str(s.st_mtime_ns) + ":" + str(s.st_size)\nexcept OSError as exc:\n    print(json.dumps({"triggered": True, "title": "文件不可访问", "event": PATH + ": " + repr(exc)}, ensure_ascii=False))\n    raise SystemExit(0)\nprev = st.get("fingerprint")\nif prev is not None and prev != fp:\n    print(json.dumps({"triggered": True, "title": "文件发生变化", "event": PATH + " 已被修改(mtime/size 变化)。", "state": {"fingerprint": fp}}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False, "state": {"fingerprint": fp}}, ensure_ascii=False))\n'
-    },
-    {
-      id: "port", name: "端口存活(不可达触发)",
-      params: [
-        { k: "__HOST__", d: "127.0.0.1", label: "主机" },
-        { k: "__PORT__", d: "8080", label: "端口" },
-        { k: "__TIMEOUT__", d: "5", label: "超时秒数" }
-      ],
-      script: '#!/usr/bin/env python3\nimport json, socket\n\nHOST, PORT, TIMEOUT = "__HOST__", __PORT__, __TIMEOUT__\ntry:\n    with socket.create_connection((HOST, PORT), timeout=TIMEOUT):\n        print(json.dumps({"triggered": False}, ensure_ascii=False))\nexcept Exception as exc:\n    print(json.dumps({"triggered": True, "title": "端口不可达", "event": HOST + ":" + str(PORT) + " 连接失败: " + repr(exc)}, ensure_ascii=False))\n'
-    },
-    {
-      id: "log", name: "日志关键字(增量扫描)",
-      params: [
-        { k: "__FILE__", d: "/var/log/app.log", label: "日志文件" },
-        { k: "__KEYWORD__", d: "ERROR", label: "关键字" }
-      ],
-      script: '#!/usr/bin/env python3\nimport json, os\n\nFILE, KEY = "__FILE__", "__KEYWORD__"\nst = json.loads(os.environ.get("EVENT_STATE") or "{}")\noffset = int(st.get("offset", 0))\ntry:\n    size = os.path.getsize(FILE)\nexcept OSError as exc:\n    print(json.dumps({"triggered": True, "title": "日志文件不可读", "event": FILE + ": " + repr(exc)}, ensure_ascii=False))\n    raise SystemExit(0)\nif size < offset:\n    offset = 0\nhits = []\nwith open(FILE, "r", encoding="utf-8", errors="replace") as f:\n    f.seek(offset)\n    for line in f:\n        if KEY in line:\n            hits.append(line.strip()[:200])\n    offset = f.tell()\nif hits:\n    more = " (+" + str(len(hits) - 5) + " more)" if len(hits) > 5 else ""\n    print(json.dumps({"triggered": True, "title": "日志命中 " + KEY, "event": chr(10).join(hits[:5]) + more, "state": {"offset": offset}}, ensure_ascii=False))\nelse:\n    print(json.dumps({"triggered": False, "state": {"offset": offset}}, ensure_ascii=False))\n'
+    en: {
+      menu: "Event Tasks", crumb: "Control / ", create: "+ Create Task",
+      colTask: "Task", colInterval: "Interval", colCounters: "Runs/Fires", colLastRun: "Last run",
+      colEnabled: "Enabled", colActions: "Actions",
+      btnRun: "▶ Run", btnRuns: "History", btnEdit: "Edit", btnDelete: "Delete",
+      runNowOk: "One check executed", deleteConfirm: "Delete this task?",
+      modalCreate: "Create Event Task", modalEdit: "Edit Event Task (hot update)",
+      fId: "Task ID", fName: "Task name", fEnabled: "Enabled", fInbox: "Save results to inbox",
+      fChecker: "Checker", fInterval: "Check interval (s, ≥10)", fTaskType: "Task type",
+      fRequest: "Request content", fNotify: "Notification content", fChannel: "Target channel",
+      fUser: "Target user ID", fSession: "Target session ID", fMode: "Dispatch mode",
+      fSilent: "Silent delivery", fShare: "Shared session", fToolSafety: "Tool safety approval",
+      fCooldown: "Cooldown (s)", fScriptTimeout: "Script timeout (s)", fTimeout: "Reasoning timeout (s)",
+      actionNotify: "Notify (no reasoning)", actionAgent: "Agent reasoning",
+      srcTemplate: "From template", srcPaste: "Paste script", srcPath: "Script path",
+      phName: "e.g. NVDA breakout watch", phPaste: "Python: read EVENT_STATE, print {triggered:true, title, event, state} to stdout",
+      phPath: "/abs/path/checker.py", phSession: "Empty = dedicated session; searchable",
+      btnCancel: "Cancel", btnValidate: "Validate only", btnSave: "Save",
+      alertGate: "Saving runs the registration gate: syntax check → dry-run (executes once for real and seeds state) → content-hash pinning; any script change re-validates.",
+      drawerTitle: "Run history: ", showAll: "Show all (incl. check/cooldown-skipped)", noRuns: "No records yet",
+      saved: "Saved", validated: "Validation passed", targetsFail: "Failed to load dispatch targets: ",
+      nameRequired: "Task name is required", pasteRequired: "Paste the script content", pathRequired: "Script path is required",
+      notify: "notify", agent: "agent",
+      expandedScript: "Script: ", expandedDeliver: "Dispatch: ", expandedCooldown: " · Cooldown: ",
+      kindTrigger: "🔥 Fired", kindError: "🔴 Error", kindCheck: "Check", kindSkipped: "⏸ Cooldown-skipped"
     }
-  ];
-
-  var KIND_META = {
-    trigger: { color: "orange", text: "🔥 触发" },
-    error:   { color: "red", text: "🔴 错误" },
-    check:   { color: "default", text: "检查" },
-    skipped: { color: "blue", text: "⏸ 冷却跳过" }
   };
+  var TOOLTIPS = {
+    zh: {
+      id: "任务的唯一标识符,由系统在创建时自动分配,不可修改。",
+      name: "任务的友好名称,便于识别。",
+      enabled: "关闭后停止检查,但保留任务配置。",
+      inbox: "开启后,任务执行成功且投递成功时,会将结果写入收件箱;若投递失败,系统会自动兜底写入收件箱。",
+      checker: "检查脚本按间隔轮询执行:读环境变量 EVENT_STATE(上次持久化状态),stdout 输出 JSON(必须含布尔 triggered,可带 title/event/cooldown/state)。保存时走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;之后修改脚本会被拒跑,需重新注册。",
+      interval: "最小 10 秒。",
+      taskType: "选择 'notify' 用于纯通知告警(不推理),选择 'agent' 触发智能体推理。",
+      requestInput: "填写希望智能体执行的任务,占位符 {title} {event} 会被脚本输出替换。",
+      notifyTpl: "固定消息模板,占位符 {title} {event} 会被脚本输出替换。",
+      dispatchChannel: "响应将发送到的目标频道(例如:'console'、'ntfy')。",
+      dispatchTargetUserId: "在目标频道中接收响应的用户ID。",
+      dispatchTargetSessionId: "在目标频道中传递响应的会话ID。留空时,本任务使用独立的累积会话(每次运行共享同一上下文,与其他会话隔离)。",
+      dispatchMode: "选择 'stream' 获取实时响应,或选择 'final' 仅获取完整响应。",
+      silentDelivery: "完整执行智能体任务并保留会话和追踪记录,但不向渠道发送结果。",
+      shareSession: "开启时,与目标用户共用会话。关闭时,本任务在独立会话中运行,互不影响。适用于不需要记忆历史的独立任务。默认:关闭",
+      toolSafety: "开启时,高风险工具调用需要用户审批(可能阻塞无人值守的事件任务)。关闭时,工具调用不再请求审批;文件防护规则仍然生效。默认:关闭",
+      cooldown: "触发后在此时间内不再重复触发,防止事件风暴。脚本也可通过输出 cooldown 字段覆盖。"
+    },
+    en: {
+      id: "Unique task ID, assigned automatically at creation, immutable.",
+      name: "A friendly name to identify the task.",
+      enabled: "When off, checking stops but the task configuration is kept.",
+      inbox: "When on, successful runs with successful delivery are written to the inbox; failed deliveries fall back to the inbox automatically.",
+      checker: "The checker script is polled at a fixed interval: reads env EVENT_STATE (last persisted state) and prints a JSON to stdout (boolean 'triggered' required; optional title/event/cooldown/state). Saving runs the registration gate: syntax check → dry-run (executes once for real and seeds state) → content-hash pinning; later script changes are refused until re-registered.",
+      interval: "Minimum 10 seconds.",
+      taskType: "'notify' delivers a plain notification (no reasoning); 'agent' fires agent reasoning.",
+      requestInput: "The task you want the agent to perform; {title} {event} placeholders are replaced by the script output.",
+      notifyTpl: "Fixed message template; {title} {event} placeholders are replaced by the script output.",
+      dispatchChannel: "The channel the response is delivered to (e.g. 'console', 'ntfy').",
+      dispatchTargetUserId: "The user ID receiving the response in the target channel.",
+      dispatchTargetSessionId: "The session ID receiving the response in the target channel. Leave empty for a dedicated accumulating session (runs share one context, isolated from others).",
+      dispatchMode: "'stream' for live responses, 'final' for the completed response only.",
+      silentDelivery: "Run the agent task fully and keep session/trace records, but deliver nothing to channels.",
+      shareSession: "When on, shares the session with the target user. When off, this task runs in its own session, isolated from others. For stateless tasks. Default: off",
+      toolSafety: "When on, high-risk tool calls require user approval (may block unattended event tasks). When off, tool calls run without approval; file-protection rules still apply. Default: off",
+      cooldown: "After a fire, no re-fire within this window (event-storm protection). The script's cooldown output field can override per-fire."
+    }
+  };
+  function mkT(locale) {
+    return function (k) { return (L10N[locale] && L10N[locale][k]) || L10N.zh[k] || k; };
+  }
+  function tt(T, locale, k) { return (TOOLTIPS[locale] && TOOLTIPS[locale][k]) || TOOLTIPS.zh[k]; }
+  function loc(v, locale) {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v;
+    return v[locale] || v.zh || "";
+  }
 
   /* ================= rule form modal ================= */
-  var TOOLTIPS = {
-    name: "任务的友好名称,便于识别。",
-    enabled: "关闭后停止检查,但保留任务配置。",
-    checker: "检查脚本按间隔轮询执行:读环境变量 EVENT_STATE(上次持久化状态),stdout 输出 JSON(必须含布尔 triggered,可带 title/event/cooldown/state)。保存时走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;之后修改脚本会被拒跑,需重新注册。",
-    taskType: "选择 'notify' 用于纯通知告警(不推理),选择 'agent' 触发智能体推理。",
-    notifyTpl: "固定消息模板,占位符 {title} {event} 会被脚本输出替换。",
-    requestInput: "填写希望智能体执行的任务,占位符 {title} {event} 会被脚本输出替换。",
-    dispatchChannel: "响应将发送到的目标频道(例如:'console'、'ntfy')。",
-    dispatchTargetUserId: "在目标频道中接收响应的用户ID。",
-    dispatchTargetSessionId: "在目标频道中传递响应的会话ID。留空时,本任务使用独立的累积会话(每次运行共享同一上下文,与其他会话隔离)。",
-    dispatchMode: "选择 'stream' 获取实时响应,或选择 'final' 仅获取完整响应。",
-    silentDelivery: "完整执行智能体任务并保留会话和追踪记录,但不向渠道发送结果。",
-    shareSession: "开启时,与目标用户共用会话。关闭时,本任务在独立会话中运行,互不影响。适用于不需要记忆历史的独立任务。默认:关闭",
-    toolSafety: "开启时,高风险工具调用需要用户审批(可能阻塞无人值守的事件任务)。关闭时,工具调用不再请求审批;文件防护规则仍然生效。默认:关闭",
-    id: "任务的唯一标识符,由系统在创建时自动分配,不可修改。",
-    cooldown: "触发后在此时间内不再重复触发,防止事件风暴。脚本也可通过输出 cooldown 字段覆盖。"
-  };
-
   function RuleFormModal(props) {
     var open = props.open, editing = props.editing, onClose = props.onClose, onSaved = props.onSaved;
+    var locale = H.useLocale ? H.useLocale() : NAV_LANG;
+    var T = mkT(locale);
     var st = React.useState({});
     var v = st[0], setV = st[1];
     var stSrc = React.useState("template");
@@ -123,7 +149,7 @@
     var pv = stP[0], setPv = stP[1];
     var stS = React.useState(false);
     var saving = stS[0], setSaving = stS[1];
-    var stT = React.useState({ channels: ["console"], items: [] });
+    var stT = React.useState({ channels: ["console"], items: [], templates: [] });
     var targets = stT[0], setTargets = stT[1];
 
     React.useEffect(function () {
@@ -131,7 +157,9 @@
         setSource(editing ? "path" : "template");
         setPv({});
         api("/dispatch-targets").then(function (d) { setTargets(d); })
-          .catch(function (err) { message.error("投递目标加载失败: " + String(err.message || err).slice(0, 150)); });
+          .catch(function (err) { message.error(T("targetsFail") + String(err.message || err).slice(0, 150)); });
+        api("/templates").then(function (d) { setTargets(function (prev) { return Object.assign({}, prev, { templates: d.templates || [] }); }); })
+          .catch(function () {});
         var rt = (editing && editing.runtime) || {};
         setV(editing ? {
           name: editing.name, enabled: editing.enabled,
@@ -181,13 +209,15 @@
         enabled: v.enabled !== false
       };
       if (source === "template" && !editing) {
-        var t = TEMPLATES.find(function (x) { return x.id === tplId; });
-        var s = t.script;
-        t.params.forEach(function (pr) {
-          var val = (pv[pr.k] !== undefined && pv[pr.k] !== "") ? pv[pr.k] : pr.d;
-          s = s.split(pr.k).join(val);
-        });
-        body.script_content = s;
+        var t = (targets.templates || []).find(function (x) { return x.id === tplId; });
+        if (t) {
+          var s = t.script;
+          t.params.forEach(function (pr) {
+            var val = (pv[pr.k] !== undefined && pv[pr.k] !== "") ? pv[pr.k] : pr.d;
+            s = s.split(pr.k).join(val);
+          });
+          body.script_content = s;
+        }
       } else if (source === "paste") {
         body.script_content = v.script_content || "";
       } else if (source === "path") {
@@ -197,16 +227,16 @@
     }
 
     function submit(validateOnly) {
-      if (!v.name) { message.error("请输入任务名称"); return; }
-      if (source === "paste" && !(v.script_content || "").trim()) { message.error("请粘贴脚本内容"); return; }
-      if (source === "path" && !(v.script_path || "").trim()) { message.error("请填写脚本路径"); return; }
+      if (!v.name) { message.error(T("nameRequired")); return; }
+      if (source === "paste" && !(v.script_content || "").trim()) { message.error(T("pasteRequired")); return; }
+      if (source === "path" && !(v.script_path || "").trim()) { message.error(T("pathRequired")); return; }
       setSaving(true);
       var body = buildBody();
       var url = editing ? ("/" + editing.id + "?validate_only=" + validateOnly) : ("/?validate_only=" + validateOnly);
       api(url, { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (d) {
           var w = (d.warnings || []).filter(function (x) { return x.indexOf("validate-only") < 0; });
-          message.success((validateOnly ? "校验通过" : "已保存") + (w.length ? ":" + w.join(";") : ""));
+          message.success((validateOnly ? T("validated") : T("saved")) + (w.length ? ":" + w.join(";") : ""));
           if (!validateOnly) onSaved();
         })
         .catch(function (err) { message.error(String(err.message || err).slice(0, 300)); })
@@ -215,74 +245,88 @@
 
     if (!open) return null;
 
-    var curTpl = TEMPLATES.find(function (t) { return t.id === tplId; }) || TEMPLATES[0];
+    var tplList = targets.templates || [];
+    var curTpl = tplList.find(function (t) { return t.id === tplId; }) || tplList[0];
     var isAgent = v.action === "agent";
+
+    function lab(text, tip, required) {
+      return e("span", null,
+        text, " ",
+        required ? e("span", { style: { color: "#ff4d4f" }, title: "必填 / required" }, "*") : null,
+        tip ? e(Tooltip, { title: tip },
+          e("span", { style: { cursor: "help", marginLeft: 4, opacity: 0.55, fontSize: 13 } }, "ⓘ")) : null);
+    }
+    function fi(label, tip, required, control) {
+      return e("div", { style: { marginBottom: 14 } },
+        e("div", { style: { marginBottom: 6 } }, lab(label, tip, required)),
+        control);
+    }
 
     var checkerTabs = e(Tabs, {
       activeKey: source, onChange: setSource, size: "small",
       items: [
-        { key: "template", label: "从模板", disabled: !!editing, children: e("div", null,
+        { key: "template", label: T("srcTemplate"), disabled: !!editing, children: e("div", null,
             e(Select, { style: { width: "100%", marginBottom: 8 }, value: tplId,
               onChange: function (x) { setTplId(x); },
-              options: TEMPLATES.map(function (t) { return { value: t.id, label: t.name }; }) }),
-            curTpl.params.map(function (pr) {
+              options: tplList.map(function (t) { return { value: t.id, label: loc(t.name, locale) + " (" + t.id + ")" }; }) }),
+            curTpl && curTpl.params.map(function (pr) {
               return e("div", { key: pr.k, style: { marginBottom: 6 } },
-                e(Text, { type: "secondary", style: { fontSize: 12 } }, pr.label),
+                e(Text, { type: "secondary", style: { fontSize: 12 } }, loc(pr.label, locale)),
                 e(Input, { placeholder: pr.d, value: pv[pr.k] || "",
                   onChange: function (ev) { var n = {}; n[pr.k] = ev.target.value; setPv(Object.assign({}, pv, n)); } }));
             })
           ) },
-        { key: "paste", label: "粘贴脚本", children: e(TextArea, { rows: 10,
+        { key: "paste", label: T("srcPaste"), children: e(TextArea, { rows: 10,
             value: v.script_content || "",
-            placeholder: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
+            placeholder: T("phPaste"),
             onChange: function (ev) { set("script_content")(ev.target.value); } }) },
-        { key: "path", label: "引用路径", children: e(Input, {
+        { key: "path", label: T("srcPath"), children: e(Input, {
             value: v.script_path || (editing ? editing.script : ""),
-            placeholder: "/abs/path/checker.py",
+            placeholder: T("phPath"),
             onChange: function (ev) { set("script_path")(ev.target.value); } }) }
       ]
     });
 
     return e(Modal, {
-      open: open, title: editing ? "编辑事件任务(热更新)" : "创建事件任务",
+      open: open, title: editing ? T("modalEdit") : T("modalCreate"),
       width: 640, onCancel: onClose, footer: null, destroyOnClose: true,
     },
       e("div", { style: { maxHeight: "62vh", overflow: "auto", paddingRight: 4 } },
 
-        editing ? fi("任务ID", TOOLTIPS.id, false,
+        editing ? fi(T("fId"), tt(T, locale, "id"), false,
           e(Input, { value: editing.id, disabled: true })) : null,
 
-        fi("任务名称", TOOLTIPS.name, true,
-          e(Input, { value: v.name || "", placeholder: "例如:英伟达突破监控", onChange: function (ev) { set("name")(ev.target.value); } })),
+        fi(T("fName"), tt(T, locale, "name"), true,
+          e(Input, { value: v.name || "", placeholder: T("phName"), onChange: function (ev) { set("name")(ev.target.value); } })),
 
-        fi("启用状态", TOOLTIPS.enabled, false,
+        fi(T("fEnabled"), tt(T, locale, "enabled"), false,
           e(Switch, { checked: v.enabled !== false, onChange: set("enabled") })),
 
-        fi("运行结果存进收件箱", "开启后,任务执行成功且投递成功时,会将结果写入收件箱;若投递失败,系统会自动兜底写入收件箱。", false,
+        fi(T("fInbox"), tt(T, locale, "inbox"), false,
           e(Switch, { checked: v.inbox !== false, disabled: !isAgent, onChange: set("inbox") })),
 
-        fi("检查器", TOOLTIPS.checker, true, checkerTabs),
+        fi(T("fChecker"), tt(T, locale, "checker"), true, checkerTabs),
         e("div", { style: { marginBottom: 14 } },
-          e("div", { style: { marginBottom: 6 } }, lab("检查间隔(秒,≥10)", null, true)),
+          e("div", { style: { marginBottom: 6 } }, lab(T("fInterval"), tt(T, locale, "interval"), true)),
           e(InputNumber, { min: 10, value: v.interval, style: { width: 140 }, onChange: set("interval") })),
 
-        fi("任务类型", TOOLTIPS.taskType, true,
+        fi(T("fTaskType"), tt(T, locale, "taskType"), true,
           e(Radio.Group, { value: v.action, onChange: function (ev) { set("action")(ev.target.value); } },
-            e(Radio.Button, { value: "notify" }, "通知(不推理)"),
-            e(Radio.Button, { value: "agent" }, "Agent 推理"))),
+            e(Radio.Button, { value: "notify" }, T("actionNotify")),
+            e(Radio.Button, { value: "agent" }, T("actionAgent")))),
 
         isAgent
-          ? fi("请求内容", TOOLTIPS.requestInput, true,
+          ? fi(T("fRequest"), tt(T, locale, "requestInput"), true,
               e(TextArea, { rows: 2, value: v.prompt_template || "", onChange: function (ev) { set("prompt_template")(ev.target.value); } }))
-          : fi("通知内容", TOOLTIPS.notifyTpl, true,
+          : fi(T("fNotify"), tt(T, locale, "notifyTpl"), true,
               e(TextArea, { rows: 2, value: v.notify_template || "", onChange: function (ev) { set("notify_template")(ev.target.value); } })),
 
-        fi("目标频道", TOOLTIPS.dispatchChannel, true,
+        fi(T("fChannel"), tt(T, locale, "dispatchChannel"), true,
           e(Select, { style: { width: "100%" }, value: v.channel || "console", showSearch: true,
             options: (targets.channels || ["console"]).map(function (c) { return { value: c, label: c }; }),
             onChange: set("channel") })),
 
-        fi("目标用户ID", TOOLTIPS.dispatchTargetUserId, true,
+        fi(T("fUser"), tt(T, locale, "dispatchTargetUserId"), true,
           e(Select, { style: { width: "100%" }, value: v.user_id || "default", showSearch: true,
             options: (function () {
               var src = targets.items || [];
@@ -293,10 +337,10 @@
             })(),
             onChange: set("user_id") })),
 
-        fi("目标会话ID", TOOLTIPS.dispatchTargetSessionId, false,
+        fi(T("fSession"), tt(T, locale, "dispatchTargetSessionId"), false,
           e(Select, { style: { width: "100%" }, value: v.session_id || undefined,
             showSearch: true, allowClear: true,
-            placeholder: "留空=独立会话;可搜索选择已有会话",
+            placeholder: T("phSession"),
             filterOption: function (input, option) {
               if (!input) return true;
               return String(option.value || "").toLowerCase().indexOf(input.toLowerCase()) >= 0;
@@ -308,33 +352,33 @@
             })(),
             onChange: function (val) { set("session_id")(val || null); } })),
 
-        isAgent ? fi("分发模式", TOOLTIPS.dispatchMode, false,
-          e(Select, { style: { width: 200 }, value: v.dispatch_mode || "final",
+        isAgent ? fi(T("fMode"), tt(T, locale, "dispatchMode"), false,
+          e(Select, { style: { width: 200 }, value: v.dispatch_mode || "stream",
             options: [{ value: "final", label: "final" }, { value: "stream", label: "stream" }],
             onChange: set("dispatch_mode") })) : null,
 
-        fi("静默投递", TOOLTIPS.silentDelivery, false,
+        fi(T("fSilent"), tt(T, locale, "silentDelivery"), false,
           e(Switch, { checked: !!v.silent, disabled: !isAgent, onChange: set("silent") })),
 
-        fi("共用会话", TOOLTIPS.shareSession, false,
+        fi(T("fShare"), tt(T, locale, "shareSession"), false,
           e(Switch, { checked: !!v.share_session, onChange: set("share_session") })),
 
-        fi("工具安全审批", TOOLTIPS.toolSafety, false,
+        fi(T("fToolSafety"), tt(T, locale, "toolSafety"), false,
           e(Switch, { checked: !!v.tool_safety, onChange: set("tool_safety") })),
 
         e("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 } },
-          e(Space, { align: "center" }, lab("冷却(秒)", TOOLTIPS.cooldown, false), e(InputNumber, { min: 0, value: v.cooldown, style: { width: 100 }, onChange: set("cooldown") })),
-          e(Space, { align: "center" }, e(Text, null, "脚本超时(秒)"), e(InputNumber, { min: 1, value: v.script_timeout, style: { width: 90 }, onChange: set("script_timeout") })),
-          e(Space, { align: "center" }, e(Text, null, "推理超时(秒)"), e(InputNumber, { min: 1, value: v.timeout, style: { width: 90 }, onChange: set("timeout") }))
+          e(Space, { align: "center" }, lab(T("fCooldown"), tt(T, locale, "cooldown"), false), e(InputNumber, { min: 0, value: v.cooldown, style: { width: 100 }, onChange: set("cooldown") })),
+          e(Space, { align: "center" }, e(Text, null, T("fScriptTimeout")), e(InputNumber, { min: 1, value: v.script_timeout, style: { width: 90 }, onChange: set("script_timeout") })),
+          e(Space, { align: "center" }, e(Text, null, T("fTimeout")), e(InputNumber, { min: 1, value: v.timeout, style: { width: 90 }, onChange: set("timeout") }))
         ),
 
-        e(Alert, { style: { marginTop: 2 }, type: "info", showIcon: false, message: "保存走注册关卡:语法检查 → 试跑(真实执行一次并初始化状态)→ 内容 hash 锚定;改脚本即重新校验。" })
+        e(Alert, { style: { marginTop: 2 }, type: "info", showIcon: false, message: T("alertGate") })
       ),
       e("div", { style: { textAlign: "right", marginTop: 10 } },
         e(Space, null,
-          e(Button, { onClick: onClose }, "取消"),
-          e(Button, { onClick: function () { submit(true); }, loading: saving }, "仅校验"),
-          e(Button, { type: "primary", onClick: function () { submit(false); }, loading: saving }, "保存")
+          e(Button, { onClick: onClose }, T("btnCancel")),
+          e(Button, { onClick: function () { submit(true); }, loading: saving }, T("btnValidate")),
+          e(Button, { type: "primary", onClick: function () { submit(false); }, loading: saving }, T("btnSave"))
         ))
     );
   }
@@ -342,10 +386,18 @@
   /* ================= runs drawer ================= */
   function RunsDrawer(props) {
     var rule = props.rule, onClose = props.onClose;
+    var locale = H.useLocale ? H.useLocale() : NAV_LANG;
+    var T = mkT(locale);
     var st = React.useState([]);
     var runs = st[0], setRuns = st[1];
     var st2 = React.useState(false);
     var showAll = st2[0], setShowAll = st2[1];
+    var KIND_META = {
+      trigger: { color: "orange", text: T("kindTrigger") },
+      error:   { color: "red", text: T("kindError") },
+      check:   { color: "default", text: T("kindCheck") },
+      skipped: { color: "blue", text: T("kindSkipped") }
+    };
 
     React.useEffect(function () {
       if (rule) {
@@ -358,12 +410,12 @@
       .filter(function (r) { return showAll || r.kind === "trigger" || r.kind === "error"; });
 
     return e(Drawer, { open: !!rule, onClose: onClose, width: 480,
-      title: rule ? "执行记录:" + rule.name : "" },
+      title: rule ? T("drawerTitle") + rule.name : "" },
       e("div", { style: { marginBottom: 8 } },
         e(Space, { align: "center" },
-          e(Text, null, "显示全部(含 检查/冷却跳过)"),
+          e(Text, null, T("showAll")),
           e(Switch, { checked: showAll, onChange: setShowAll }))),
-      shown.length === 0 ? e(Text, { type: "secondary" }, "暂无记录") : null,
+      shown.length === 0 ? e(Text, { type: "secondary" }, T("noRuns")) : null,
       shown.map(function (r, i) {
         var m = KIND_META[r.kind] || { color: "default", text: r.kind };
         return e("div", { key: i, style: { borderBottom: "1px solid rgba(128,128,128,.15)", padding: "6px 0" } },
@@ -377,6 +429,8 @@
 
   /* ================= main page ================= */
   function RulesPage() {
+    var locale = H.useLocale ? H.useLocale() : NAV_LANG;
+    var T = mkT(locale);
     var s1 = React.useState([]);
     var rules = s1[0], setRules = s1[1];
     var s2 = React.useState(false);
@@ -402,7 +456,7 @@
     }
     function runNow(rule) {
       api("/" + rule.id + "/run", { method: "POST" })
-        .then(function () { message.success("已执行一次检查"); load(); })
+        .then(function () { message.success(T("runNowOk")); load(); })
         .catch(function (err) { message.error(String(err.message || err)); });
     }
     function del(rule) {
@@ -411,42 +465,42 @@
     }
 
     var columns = [
-      { title: "任务", dataIndex: "name",
+      { title: T("colTask"), dataIndex: "name",
         render: function (v, r) {
           return e(Space, { direction: "vertical", size: 0 },
             e(Space, { size: 6 },
               e(Badge, { status: !r.enabled ? "default" : (r.last_error ? "error" : "success") }),
               e("b", null, v),
-              e(Tag, { color: r.action === "agent" ? "geekblue" : "green" }, r.action === "agent" ? "agent" : "notify")),
+              e(Tag, { color: r.action === "agent" ? "geekblue" : "green" }, r.action === "agent" ? T("agent") : T("notify"))),
             r.last_error ? e(Text, { type: "danger", style: { fontSize: 12 } }, String(r.last_error).slice(0, 90)) : null);
         } },
-      { title: "间隔", width: 70, render: function (_, r) { return e(Text, null, r.interval_seconds + "s"); } },
-      { title: "运行/触发", width: 110, render: function (_, r) { return e(Text, null, "⟳" + r.run_count + " ▲" + r.trigger_count); } },
-      { title: "上次运行", width: 150, render: function (_, r) { return e(Text, { type: "secondary" }, ts(r.last_run_at)); } },
-      { title: "启用", width: 70, render: function (_, r) { return e(Switch, { checked: r.enabled, onChange: function (x) { toggle(r, x); } }); } },
-      { title: "操作", width: 270, render: function (_, r) {
+      { title: T("colInterval"), width: 70, render: function (_, r) { return e(Text, null, r.interval_seconds + "s"); } },
+      { title: T("colCounters"), width: 110, render: function (_, r) { return e(Text, null, "⟳" + r.run_count + " ▲" + r.trigger_count); } },
+      { title: T("colLastRun"), width: 150, render: function (_, r) { return e(Text, { type: "secondary" }, ts(r.last_run_at)); } },
+      { title: T("colEnabled"), width: 70, render: function (_, r) { return e(Switch, { checked: r.enabled, onChange: function (x) { toggle(r, x); } }); } },
+      { title: T("colActions"), width: 270, render: function (_, r) {
           return e(Space, { size: 2 },
-            e(Button, { size: "small", onClick: function () { runNow(r); } }, "▶ 执行"),
-            e(Button, { size: "small", onClick: function () { setRunsRule(r); } }, "记录"),
-            e(Button, { size: "small", type: "link", onClick: function () { setEditing(r); setModalOpen(true); } }, "编辑"),
-            e(Popconfirm, { title: "删除该任务?", onConfirm: function () { del(r); } },
-              e(Button, { size: "small", type: "link", danger: true }, "删除")));
+            e(Button, { size: "small", onClick: function () { runNow(r); } }, T("btnRun")),
+            e(Button, { size: "small", onClick: function () { setRunsRule(r); } }, T("btnRuns")),
+            e(Button, { size: "small", type: "link", onClick: function () { setEditing(r); setModalOpen(true); } }, T("btnEdit")),
+            e(Popconfirm, { title: T("deleteConfirm"), onConfirm: function () { del(r); } },
+              e(Button, { size: "small", type: "link", danger: true }, T("btnDelete"))));
         } }
     ];
 
     return e("div", { style: { padding: "16px 24px" } },
       e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
         e("div", { style: { fontSize: 18, fontWeight: 600 } },
-          e(Text, { type: "secondary", style: { fontSize: 18, fontWeight: 600 } }, "控制 / "),
-          e("span", null, "事件任务")),
-        e(Button, { type: "primary", onClick: function () { setEditing(null); setModalOpen(true); } }, "+ 创建任务")),
+          e(Text, { type: "secondary", style: { fontSize: 18, fontWeight: 600 } }, T("crumb")),
+          e("span", null, T("menu"))),
+        e(Button, { type: "primary", onClick: function () { setEditing(null); setModalOpen(true); } }, T("create"))),
       e(Table, {
         rowKey: "id", dataSource: rules, columns: columns, pagination: false,
         expandable: {
           expandedRowRender: function (r) {
             return e("div", { style: { fontSize: 12 } },
-              e("div", null, "脚本: ", r.script, " (hash ", r.script_hash, ")"),
-              e("div", null, "投递: ", JSON.stringify(r.dispatch), " · 冷却: ", r.cooldown_seconds, "s · state: ", JSON.stringify(r.state)));
+              e("div", null, T("expandedScript"), r.script, " (hash ", r.script_hash, ")"),
+              e("div", null, T("expandedDeliver"), JSON.stringify(r.dispatch), T("expandedCooldown"), r.cooldown_seconds, "s · state: ", JSON.stringify(r.state)));
           }
         }
       }),
@@ -463,12 +517,13 @@
   }, e("path", { d: "M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-198 249.5c-4.1 5.3-.4 13 6.3 13h382.9c2.8 0 5.5-1.5 6.9-4l259.4-434.5c3.2-5.2-.6-12.2-6.8-12.2z" }));
 
   window.QwenPaw.menu.add(P, {
-    id: "event-trigger.menu", label: "事件任务", route: "event-trigger.home",
-    icon: BoltIcon, location: "primary.agentScoped", order: 60
+    id: "event-trigger.menu", label: NAV_LANG === "zh" ? "事件任务" : "Event Tasks",
+    route: "event-trigger.home", icon: BoltIcon,
+    location: "primary.agentScoped", order: 60
   });
   window.QwenPaw.route.add(P, {
     id: "event-trigger.home", path: "/event-trigger", component: RulesPage
   });
 
-  console.log("[event-trigger] frontend registered (v4 cron-parity form)");
+  console.log("[event-trigger] frontend registered (v5 i18n zh/en)");
 })();

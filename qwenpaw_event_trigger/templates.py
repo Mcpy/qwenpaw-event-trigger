@@ -9,11 +9,11 @@ substituted client-side before registration.
 TEMPLATES = [
     {
         "id": "stock",
-        "name": "股价阈值监控(滞回)",
+        "name": {"zh": "股价阈值监控(滞回)", "en": "Stock price threshold (hysteresis)"},
         "params": [
-            {"k": "__TICKER__", "d": "NVDA", "label": "股票代码(如 NVDA、AAPL、TSLA)"},
-            {"k": "__THRESHOLD__", "d": "200", "label": "触发阈值"},
-            {"k": "__RELEASE_PCT__", "d": "0.98", "label": "重武装比例(0.98=回踩2%)"},
+            {"k": "__TICKER__", "d": "NVDA", "label": {"zh": "股票代码(如 NVDA、AAPL、TSLA)", "en": "Ticker (NVDA, AAPL, TSLA)"}},
+            {"k": "__THRESHOLD__", "d": "200", "label": {"zh": "触发阈值", "en": "Threshold"}},
+            {"k": "__RELEASE_PCT__", "d": "0.98", "label": {"zh": "重武装比例(0.98=回踩2%)", "en": "Release ratio (0.98 = re-arm at 2% pullback)"}},
         ],
         "script": '''#!/usr/bin/env python3
 import json, os, urllib.request
@@ -40,10 +40,10 @@ else:
     },
     {
         "id": "http",
-        "name": "HTTP 探测(非2xx/超时触发)",
+        "name": {"zh": "HTTP 探测(非2xx/超时触发)", "en": "HTTP probe (fire on non-2xx/timeout)"},
         "params": [
-            {"k": "__URL__", "d": "https://example.com/health", "label": "探测 URL"},
-            {"k": "__TIMEOUT__", "d": "10", "label": "超时秒数"},
+            {"k": "__URL__", "d": "https://example.com/health", "label": {"zh": "探测 URL", "en": "URL to probe"}},
+            {"k": "__TIMEOUT__", "d": "10", "label": {"zh": "超时秒数", "en": "Timeout seconds"}},
         ],
         "script": '''#!/usr/bin/env python3
 import json, urllib.request
@@ -63,8 +63,8 @@ else:
     },
     {
         "id": "file",
-        "name": "文件变化监测",
-        "params": [{"k": "__PATH__", "d": "/path/to/file", "label": "文件路径"}],
+        "name": {"zh": "文件变化监测", "en": "File change monitor"},
+        "params": [{"k": "__PATH__", "d": "/path/to/file", "label": {"zh": "文件路径", "en": "File path"}}],
         "script": '''#!/usr/bin/env python3
 import json, os
 
@@ -85,11 +85,11 @@ else:
     },
     {
         "id": "port",
-        "name": "端口存活(不可达触发)",
+        "name": {"zh": "端口存活(不可达触发)", "en": "Port alive (fire when unreachable)"},
         "params": [
-            {"k": "__HOST__", "d": "127.0.0.1", "label": "主机"},
-            {"k": "__PORT__", "d": "8080", "label": "端口"},
-            {"k": "__TIMEOUT__", "d": "5", "label": "超时秒数"},
+            {"k": "__HOST__", "d": "127.0.0.1", "label": {"zh": "主机", "en": "Host"}},
+            {"k": "__PORT__", "d": "8080", "label": {"zh": "端口", "en": "Port"}},
+            {"k": "__TIMEOUT__", "d": "5", "label": {"zh": "超时秒数", "en": "Timeout seconds"}},
         ],
         "script": '''#!/usr/bin/env python3
 import json, socket
@@ -104,10 +104,10 @@ except Exception as exc:
     },
     {
         "id": "log",
-        "name": "日志关键字(增量扫描)",
+        "name": {"zh": "日志关键字(增量扫描)", "en": "Log keyword (incremental scan)"},
         "params": [
-            {"k": "__FILE__", "d": "/var/log/app.log", "label": "日志文件"},
-            {"k": "__KEYWORD__", "d": "ERROR", "label": "关键字"},
+            {"k": "__FILE__", "d": "/var/log/app.log", "label": {"zh": "日志文件", "en": "Log file"}},
+            {"k": "__KEYWORD__", "d": "ERROR", "label": {"zh": "关键字", "en": "Keyword"}},
         ],
         "script": '''#!/usr/bin/env python3
 import json, os
