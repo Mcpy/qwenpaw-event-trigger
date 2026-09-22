@@ -225,18 +225,50 @@ class Engine:
 
     async def _fire(self, rule: EventRule, out: Dict[str, Any]) -> None:
         title = out.get("title") or "event"
+        result_text = ""
         try:
             if rule.action == ActionKind.notify:
-                await self._notify(rule, self._render(rule.notify_template, out))
+                text = self._render(rule.notify_template, out)
+                await self._notify(rule, text)
+                result_text = text
             else:
                 prompt = self._render(rule.prompt_template, out)
-                await self._injector.fire(rule, prompt, out)
+                result_text = await self._injector.fire(rule, prompt, out)
             logger.info("event-trigger: fired rule=%s title=%s", rule.id, title)
         except Exception as e:
             logger.warning("event-trigger: fire failed rule=%s: %r", rule.id, e)
             await self._repo.append_run(
                 RunRecord(rule_id=rule.id, kind="error", ok=False, detail=f"fire: {e!r}")
             )
+            # delivery-failure fallback to inbox (cron parity)
+            if rule.runtime.save_result_to_inbox:
+                try:
+                    from qwenpaw.app.inbox_store import append_event as append_inbox_event
+                    await append_inbox_event(
+                        agent_id=rule.agent_id, source_type="event", source_id=rule.id,
+                        event_type="event_delivery_failed_fallback", status="error",
+                        severity="error",
+                        title=f"Event result not delivered: {rule.name}",
+                        body=f"任务已触发,但执行/投递失败:{e!r}",
+                        payload={"rule_id": rule.id, "title": title},
+                    )
+                except Exception:
+                    logger.debug("event-trigger: inbox fallback failed", exc_info=True)
+            return
+        # success: result entry to inbox (cron parity; body = real reply text)
+        if rule.runtime.save_result_to_inbox:
+            try:
+                from qwenpaw.app.inbox_store import append_event as append_inbox_event
+                await append_inbox_event(
+                    agent_id=rule.agent_id, source_type="event", source_id=rule.id,
+                    event_type="event_result", status="success", severity="info",
+                    title=f"Event result: {rule.name}",
+                    body=result_text or "(无文本结果)",
+                    payload={"rule_id": rule.id, "title": title,
+                             "action": rule.action.value},
+                )
+            except Exception:
+                logger.debug("event-trigger: inbox result append failed", exc_info=True)
 
     async def _notify(self, rule: EventRule, text: str) -> None:
         # per-workspace resolution, same as agent action — no engine-level handle
