@@ -79,4 +79,4 @@ Yes — the engine-managed script is removed with the task (the confirm dialog w
 
 ## License
 
-[MIT](./LICENSE)
+[Apache 2.0](./LICENSE)
