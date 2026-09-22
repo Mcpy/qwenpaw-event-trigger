@@ -118,6 +118,8 @@ else:
 
 **字段 / Output fields**:`title` 简短标题;`event` 详细正文(notify 即通知正文,agent 任务填入 prompt 的 `{event}`);`cooldown` 按次覆盖冷却;`state` 持久化回传。
 
+> ⚠️ 模板(notify_template / prompt_template)经 Python `str.format` 渲染,占位符 `{title}` `{event}`;文案中的**字面花括号需双写转义**——`{{"symbol": "NVDA"}}` 渲染为 `{"symbol": "NVDA"}`,单写会 KeyError。/ Templates render via `str.format` with `{title}` `{event}` placeholders; **double literal braces** (`{{...}}`) or they raise KeyError.
+
 **规则 / Rules**
 1. 持续性条件必须滞回(否则每个间隔触发 = 风暴)/ Persistent conditions need hysteresis (else fires every interval = storm)
 2. 一次性标志不要放 state——注册试跑会真实执行一次并保存 state,会把 latch 消耗掉;一次性判断放事件源本身 / One-shot flags must NOT live in state — the registration dry-run executes once for real and consumes the latch; detect one-shot-ness from the event source
