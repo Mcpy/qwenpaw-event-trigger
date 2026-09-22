@@ -76,7 +76,7 @@ class EventTriggerPlugin:
         # lazy legacy migration (loaded agents were migrated at startup)
         from qwenpaw_event_trigger import migration
         if migration.legacy_exists(LEGACY_DATA_DIR):
-            moved = migration.migrate_agent(
+            moved = await migration.migrate_agent(
                 LEGACY_DATA_DIR, agent_id, ws.workspace_dir,
             )
             if moved:
@@ -109,7 +109,11 @@ class EventTriggerPlugin:
 
             # eager migration + engine start for currently loaded agents
             registry = self._registry()
-            for agent_id in registry.list_loaded_agents():
+            loaded_dirs = {
+                aid: registry.get_loaded_agent(aid).workspace_dir
+                for aid in registry.list_loaded_agents()
+            }
+            for agent_id, ws_dir in loaded_dirs.items():
                 try:
                     await self.resolve_bundle(agent_id)
                 except Exception:
@@ -117,6 +121,9 @@ class EventTriggerPlugin:
                         "event-trigger: bundle for '%s' failed to start",
                         agent_id, exc_info=True,
                     )
+
+            from qwenpaw_event_trigger import migration
+            migration.archive_legacy_if_done(LEGACY_DATA_DIR, loaded_dirs)
 
             removed = self._gc_all()
             if removed:

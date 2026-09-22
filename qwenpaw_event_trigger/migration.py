@@ -64,11 +64,11 @@ def _copy_script(legacy_scripts_dir: str, target_scripts_dir: str,
     return current_path
 
 
-def migrate_agent(legacy_dir: str, agent_id: str, workspace_dir: str) -> int:
+async def migrate_agent(legacy_dir: str, agent_id: str, workspace_dir: str) -> int:
     """Move this agent's rules/states/scripts from the legacy dir into its
     workspace.  Idempotent: rules already present in the target are skipped.
 
-    Returns the number of migrated rules.
+    Returns the number of migrated rules.  Coroutine — Repo.save is async.
     """
     legacy = load_legacy_events(legacy_dir)
     if legacy is None:
@@ -96,28 +96,39 @@ def migrate_agent(legacy_dir: str, agent_id: str, workspace_dir: str) -> int:
         moved += 1
 
     if moved:
-        target_repo.save(target)
+        await target_repo.save(target)
         logger.info(
             "event-trigger: migrated %d rule(s) of agent '%s' -> %s",
             moved, agent_id, target_dir,
         )
-
-    _finalize_legacy_if_empty(legacy_dir)
     return moved
 
 
-def _finalize_legacy_if_empty(legacy_dir: str) -> None:
-    """Rename the legacy events.json once no un-migrated rule is left."""
+def archive_legacy_if_done(legacy_dir: str, loaded_dirs: dict) -> bool:
+    """Archive the legacy events.json when every remaining rule already lives
+    in its agent's workspace (``loaded_dirs: agent_id -> workspace_dir``).
+
+    Rules of agents that were never loaded keep the legacy file alive as the
+    lazy-migration source — the archive happens on a later startup then.
+    """
     legacy = load_legacy_events(legacy_dir)
     if legacy is None:
-        return
-    if legacy.rules:
-        return  # some agent's workspace is not loaded yet — keep as source
+        return False
+    for rule in legacy.rules:
+        aid = rule.agent_id or "default"
+        ws_dir = loaded_dirs.get(aid)
+        if ws_dir is None:
+            return False  # unloaded agent — lazy migration still needs it
+        target = Repo(os.path.join(ws_dir, "event_trigger")).load()
+        if target.get(rule.id) is None:
+            return False  # not migrated yet (should not happen)
     src = os.path.join(legacy_dir, "events.json")
     dst = src + MIGRATED_SUFFIX
     try:
         os.replace(src, dst)
         logger.info("event-trigger: legacy events.json archived as %s", dst)
+        return True
     except OSError:
         logger.warning("event-trigger: could not archive legacy events.json",
                        exc_info=True)
+        return False

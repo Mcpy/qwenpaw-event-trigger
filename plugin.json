@@ -4,7 +4,7 @@
     "zh-CN": "事件任务",
     "en-US": "Event Trigger"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "general",
   "description": {
     "en-US": "Condition-driven task engine: poll user scripts, fire agent reasoning or notify on events (the event-driven counterpart of cron jobs).",
