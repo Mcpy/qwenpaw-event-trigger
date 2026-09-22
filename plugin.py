@@ -44,6 +44,12 @@ class EventTriggerPlugin:
         async def _startup() -> None:
             # channel_manager is resolved per-workspace at fire time
             # (ws._service_manager.services); nothing to attach here.
+            # Re-entry guard: hot-reinstall can leave the previous engine's
+            # loops alive (module reload resets globals). Kill by task name.
+            import asyncio as _asyncio
+            for t in _asyncio.all_tasks():
+                if t.get_name().startswith("event-trigger:"):
+                    t.cancel()
             await engine.start()
 
         def _shutdown() -> None:
