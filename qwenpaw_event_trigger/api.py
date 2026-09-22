@@ -1,25 +1,49 @@
 # -*- coding: utf-8 -*-
-"""REST API under /api/events (FastAPI APIRouter, mounted by the plugin)."""
+"""REST API under /api/events (FastAPI APIRouter, mounted by the plugin).
+
+v0.3 — agent-scoped, aligned with the cron subsystem's URL shape:
+
+    GET  /api/events/{agent_id}/                      list rules
+    POST /api/events/{agent_id}/                      create (body = RegisterBody)
+    PUT  /api/events/{agent_id}/{rule_id}             update
+    DEL  /api/events/{agent_id}/{rule_id}             delete
+    POST /api/events/{agent_id}/{rule_id}/enable      enable  (= register)
+    POST /api/events/{agent_id}/{rule_id}/disable     disable
+    POST /api/events/{agent_id}/{rule_id}/run         fire one check now
+    GET  /api/events/{agent_id}/{rule_id}/runs        run history
+    GET  /api/events/{agent_id}/audit/recent          audit trail
+    GET  /api/events/{agent_id}/dispatch-targets      chat targets for the form
+
+Global (agent-independent) resources stay unscoped:
+    GET /api/events/templates     bundled checker templates
+    GET /api/events/protocol      script protocol doc
+
+``resolve_bundle(agent_id)`` (provided by plugin.py) resolves the agent's
+workspace (lazy-loading it when needed), migrates any legacy rules, and
+returns that agent's own Engine/Manager/Repo — the same stateless
+per-request dispatch pattern the cron router uses with
+``get_agent_for_request``.
+"""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .manager import RegistrationError, RuleManager
+from .manager import RegistrationError
 from .protocol import PROTOCOL_DOC
-from .repo import Repo
 
 
 class RegisterBody(BaseModel):
     """Rule payload. Either give an absolute script path, or inline content
     (preferred for agent-authored rules — server writes it under its
-    controlled scripts dir)."""
+    controlled scripts dir).  ``agent_id`` comes from the URL path; the body
+    field is accepted for backward compatibility but ignored."""
 
     name: str
-    agent_id: str = "default"
+    agent_id: str = ""                        # ignored — path wins
     interval_seconds: int = 60
     script_path: Optional[str] = None
     script_content: Optional[str] = None
@@ -42,7 +66,8 @@ class RegisterBody(BaseModel):
     enabled: bool = False
 
 
-def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
+def _rule_from_body(rule_id: Optional[str], body: RegisterBody, agent_id: str,
+                    existing=None):
     from .models import (
         ActionKind,
         DispatchSpec,
@@ -55,7 +80,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
     script_path = body.script_path or (existing.script.path if existing else "")
     kwargs: dict = dict(
         name=body.name,
-        agent_id=body.agent_id,
+        agent_id=agent_id,
         enabled=body.enabled,
         poll=PollSpec(interval_seconds=body.interval_seconds),
         script=ScriptSpec(path=script_path, interpreter=body.interpreter),
@@ -85,27 +110,55 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
     return EventRule(**kwargs)
 
 
-def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
-    router = APIRouter(tags=["event-trigger"])  # mounted under /api/events via register_http_router
+def build_router(
+    resolve_bundle: Callable[[str], Awaitable[object]],
+    injector=None,
+) -> APIRouter:
+    router = APIRouter(tags=["event-trigger"])  # mounted under /api/events
 
-    @router.get("/dispatch-targets")
-    async def dispatch_targets(request: Request, channel: Optional[str] = None, limit: int = 500):
-        """Candidate dispatch targets derived from known chats (cron parity).
-
-        The console form fills its channel / user / session dropdowns from this.
-        """
-        ws = None
+    async def _bundle(agent_id: str):
         try:
-            from qwenpaw.app.agent_context import get_agent_for_request
-            ws = await get_agent_for_request(request)
-        except Exception:
-            ws = None
-        if ws is None and injector is not None:
+            return await resolve_bundle(agent_id)
+        except KeyError as e:
+            raise HTTPException(404, f"unknown agent: {agent_id}") from e
+
+    # ---- global resources (agent-independent) ----
+
+    @router.get("/templates")
+    async def templates():
+        from .templates import TEMPLATES
+        return {"templates": TEMPLATES}
+
+    @router.get("/protocol")
+    async def protocol():
+        return {"protocol": PROTOCOL_DOC}
+
+    @router.get("/")
+    async def root():
+        """Index: agents with event-task data are discovered on demand."""
+        agents = []
+        if injector is not None:
             try:
-                ws = injector._workspace("default")
+                reg = injector._registry_()
+                agents = sorted(reg.list_loaded_agents())
             except Exception:
-                ws = None
-        cm = getattr(ws, "chat_manager", None) if ws is not None else None
+                agents = []
+        return {
+            "service": "event-trigger",
+            "version": "0.3",
+            "usage": "GET/POST /api/events/{agent_id}/ ... — per-agent scope",
+            "loaded_agents": agents,
+        }
+
+    # ---- agent-scoped ----
+
+    @router.get("/{agent_id}/dispatch-targets")
+    async def dispatch_targets(agent_id: str, channel: Optional[str] = None,
+                               limit: int = 500):
+        """Candidate dispatch targets derived from known chats (cron parity)."""
+        bundle = await _bundle(agent_id)
+        ws = bundle.workspace
+        cm = getattr(ws, "chat_manager", None)
         if cm is None:
             return {"channels": ["console"], "items": []}
 
@@ -127,85 +180,87 @@ def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
             channels.insert(0, "console")
         return {"channels": channels, "items": items}
 
+    @router.get("/{agent_id}/audit/recent")
+    async def audit(agent_id: str, limit: int = 50):
+        bundle = await _bundle(agent_id)
+        return {"audit": await bundle.repo.recent_audit(limit=min(limit, 500))}
 
-    @router.get("/templates")
-    async def templates():
-        """Bundled checker-script templates (single source of truth)."""
-        from .templates import TEMPLATES
-        return {"templates": TEMPLATES}
+    @router.get("/{agent_id}/")
+    async def list_rules(agent_id: str):
+        bundle = await _bundle(agent_id)
+        return {"rules": bundle.manager.describe()}
 
-    @router.get("/protocol")
-    async def protocol():
-        return {"protocol": PROTOCOL_DOC}
-
-    @router.get("/audit/recent")
-    async def audit(limit: int = 50):
-        return {"audit": await repo.recent_audit(limit=min(limit, 500))}
-
-    @router.get("/")
-    async def list_rules():
-        return {"rules": manager.describe()}
-
-    @router.post("/")
-    async def register_rule(body: RegisterBody, validate_only: bool = False):
+    @router.post("/{agent_id}/")
+    async def register_rule(agent_id: str, body: RegisterBody,
+                            validate_only: bool = False):
         if not body.script_path and not body.script_content:
             raise HTTPException(400, "script_path or script_content required")
-        rule = _rule_from_body(None, body)
+        bundle = await _bundle(agent_id)
+        rule = _rule_from_body(None, body, agent_id)
         try:
-            rule, warnings = await manager.register(
+            rule, warnings = await bundle.manager.register(
                 rule, body.script_content, validate_only=validate_only
             )
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
-        return {"rule_id": rule.id, "warnings": warnings, "rules": manager.describe()}
+        return {"rule_id": rule.id, "warnings": warnings,
+                "rules": bundle.manager.describe()}
 
-    @router.put("/{rule_id}")
-    async def update_rule(rule_id: str, body: RegisterBody):
-        existing = manager.events.get(rule_id)
+    @router.put("/{agent_id}/{rule_id}")
+    async def update_rule(agent_id: str, rule_id: str, body: RegisterBody):
+        bundle = await _bundle(agent_id)
+        existing = bundle.manager.events.get(rule_id)
         if not existing:
             raise HTTPException(404, f"unknown rule: {rule_id}")
-        rule = _rule_from_body(rule_id, body, existing)
+        rule = _rule_from_body(rule_id, body, agent_id, existing)
         try:
-            rule, warnings = await manager.update(rule, body.script_content, config=body.config)
+            rule, warnings = await bundle.manager.update(
+                rule, body.script_content, config=body.config)
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
         return {"ok": True, "warnings": warnings}
 
-    @router.delete("/{rule_id}")
-    async def delete_rule(rule_id: str):
+    @router.delete("/{agent_id}/{rule_id}")
+    async def delete_rule(agent_id: str, rule_id: str):
+        bundle = await _bundle(agent_id)
         try:
-            await manager.delete(rule_id)
+            await bundle.manager.delete(rule_id)
         except RegistrationError as e:
             raise HTTPException(404, str(e)) from e
         return {"ok": True}
 
-    @router.post("/{rule_id}/enable")
-    async def enable(rule_id: str):
+    @router.post("/{agent_id}/{rule_id}/enable")
+    async def enable(agent_id: str, rule_id: str):
         # enable = register: re-validate (syntax + dry-run) and re-pin hash first
+        bundle = await _bundle(agent_id)
         try:
-            await manager.validate_for_enable(rule_id)
-            await manager.set_enabled(rule_id, True)
+            await bundle.manager.validate_for_enable(rule_id)
+            await bundle.manager.set_enabled(rule_id, True)
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
         return {"ok": True}
 
-    @router.post("/{rule_id}/disable")
-    async def disable(rule_id: str):
+    @router.post("/{agent_id}/{rule_id}/disable")
+    async def disable(agent_id: str, rule_id: str):
+        bundle = await _bundle(agent_id)
         try:
-            await manager.set_enabled(rule_id, False)
+            await bundle.manager.set_enabled(rule_id, False)
         except RegistrationError as e:
             raise HTTPException(404, str(e)) from e
         return {"ok": True}
 
-    @router.post("/{rule_id}/run")
-    async def run_now(rule_id: str):
+    @router.post("/{agent_id}/{rule_id}/run")
+    async def run_now(agent_id: str, rule_id: str):
+        bundle = await _bundle(agent_id)
         try:
-            return await manager.run_now(rule_id)
+            return await bundle.manager.run_now(rule_id)
         except RegistrationError as e:
             raise HTTPException(404, str(e)) from e
 
-    @router.get("/{rule_id}/runs")
-    async def runs(rule_id: str, limit: int = 50):
-        return {"runs": await repo.recent_runs(rule_id, limit=min(limit, 500))}
+    @router.get("/{agent_id}/{rule_id}/runs")
+    async def runs(agent_id: str, rule_id: str, limit: int = 50):
+        bundle = await _bundle(agent_id)
+        return {"runs": await bundle.repo.recent_runs(rule_id,
+                                                      limit=min(limit, 500))}
 
     return router

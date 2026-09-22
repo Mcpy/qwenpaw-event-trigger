@@ -1,6 +1,6 @@
 ---
 name: event-tasks
-description: 仅当需要"条件触发"时使用——外部事件发生(价格突破阈值、文件被修改、HTTP 服务异常、端口不可达、日志出现关键字等)时自动触发推理或通知。/ Use ONLY for condition-triggered automation — when an external event occurs (price crosses a threshold, file modified, HTTP service down, port unreachable, keyword in logs) and you want to fire reasoning or a notification automatically. Managed via the /api/events/ REST API — also read this skill before updating a task's CONFIG params or enable/disable. For time-based schedules use the cron skill instead. / 通过 /api/events/ REST 管理;更新任务 CONFIG 参数或启停任务前也应阅读本技能。定时/周期需求请改用 cron skill。
+description: 仅当需要"条件触发"时使用——外部事件发生(价格突破阈值、文件被修改、HTTP 服务异常、端口不可达、日志出现关键字等)时自动触发推理或通知。/ Use ONLY for condition-triggered automation — when an external event occurs (price crosses a threshold, file modified, HTTP service down, port unreachable, keyword in logs) and you want to fire reasoning or a notification automatically. Managed via the agent-scoped /api/events/{agent_id}/ REST API — also read this skill before updating a task's CONFIG params or enable/disable. For time-based schedules use the cron skill instead. / 通过 /api/events/{agent_id}/ REST 管理(按 agent 隔离);更新任务 CONFIG 参数或启停任务前也应阅读本技能。定时/周期需求请改用 cron skill。
 metadata:
   builtin_skill_version: "1.0"
   qwenpaw:
@@ -30,22 +30,24 @@ Event task = **condition-driven** (fires when something happens); cron = **time-
 
 基础地址 / Base: `http://127.0.0.1:8088`(本机免认证 / no auth on localhost);远程 / remote: `Authorization: Bearer <token>`。
 
+**v0.3 起按 agent 隔离 / agent-scoped since v0.3**:每个任务属于创建它的 agent,数据存于该 agent 的工作区;URL 必须带 `agent_id` 段(用你自己的 agent_id / workspace id)。任务只在自己的作用域内可见可管理 / Each task belongs to the agent that created it; URLs must carry the `agent_id` segment. Tasks are only visible/manageable within their own scope.
+
 ```
-GET    /api/events/                 列出任务 / list tasks
-POST   /api/events/                 创建(自动走注册关卡)/ create (runs registration gate)
-PUT    /api/events/{id}             更新(脚本变更重新校验)/ update (re-validates)
-DELETE /api/events/{id}             删除 / delete
-POST   /api/events/{id}/enable      启用 / enable
-POST   /api/events/{id}/disable     禁用 / disable
-POST   /api/events/{id}/run         立即检查一次 / one manual check now
-GET    /api/events/{id}/runs        运行记录 / run history
-GET    /api/events/protocol         脚本协议全文 / full checker protocol
-GET    /api/events/templates        内置模板 / bundled templates
+GET    /api/events/{agent_id}/                 列出本 agent 的任务 / list own tasks
+POST   /api/events/{agent_id}/                 创建(自动走注册关卡)/ create (runs registration gate)
+PUT    /api/events/{agent_id}/{id}             更新(脚本变更重新校验)/ update (re-validates)
+DELETE /api/events/{agent_id}/{id}             删除 / delete
+POST   /api/events/{agent_id}/{id}/enable      启用 / enable
+POST   /api/events/{agent_id}/{id}/disable     禁用 / disable
+POST   /api/events/{agent_id}/{id}/run         立即检查一次 / one manual check now
+GET    /api/events/{agent_id}/{id}/runs        运行记录 / run history
+GET    /api/events/protocol                    脚本协议全文 / full checker protocol
+GET    /api/events/templates                   内置模板 / bundled templates
 ```
 
 ## 创建任务 / Create a task
 
-`POST /api/events/`,JSON 体 / body:
+`POST /api/events/{agent_id}/`,JSON 体 / body:
 
 ```json
 {
@@ -149,7 +151,7 @@ else:
 ```
 1. 条件触发(事件任务)还是时间触发(cron)? / condition or time?
 2. 与用户确认触发条件 → 设计检查脚本(CONFIG 参数 + 滞回)/ design checker (CONFIG + hysteresis)
-3. POST /api/events/ 创建(script_content 内联,enabled=false)
+3. POST /api/events/{agent_id}/ 创建(script_content 内联,enabled=false)
 4. POST /{id}/run 验证一次检查 / verify one check
 5. POST /{id}/enable 启用(= 注册:校验+试跑+hash 锚定)/ enable = register
 6. 排查 GET /{id}/runs;修改 PUT / inspect runs; modify via PUT
@@ -161,7 +163,7 @@ else:
 
 1. 创建:CONFIG 双边界(up=100, down=90)+ `max_triggers: 1` + enabled
 2. 触发后引擎**自动禁用**(旧条件已失效,防空转;审计留痕)
-3. agent 推理后判断新监控范围 → `PUT /api/events/{id}` 带**新 CONFIG**(up=120, down=105)→ 重新校验
+3. agent 推理后判断新监控范围 → `PUT /api/events/{agent_id}/{id}` 带**新 CONFIG**(up=120, down=105)→ 重新校验
 4. `POST /{id}/enable` 启用(本轮触发计数清零)→ 新一轮监控
 5. 人类随时可在 UI 参数表单改 CONFIG,与 agent 走同一接口
 

@@ -19,9 +19,18 @@
   var TextArea = Input.TextArea;
   var Text = Typography.Text;
 
+  function agentId() {
+    // per-agent scope (v0.3): every data call is routed to the selected agent
+    try { return (H.getSelectedAgentId && H.getSelectedAgentId()) || "default"; }
+    catch (e) { return "default"; }
+  }
   function api(p, opts) {
     // tolerant of non-JSON error bodies (e.g. plain-text 500s)
-    return H.fetch("/events" + p, opts).then(function (r) {
+    // global resources (templates/protocol) stay unscoped; everything else
+    // is agent-scoped: /events/{agent_id}/...
+    var unscoped = p.indexOf("/templates") === 0 || p.indexOf("/protocol") === 0;
+    var base = unscoped ? "/events" : "/events/" + agentId();
+    return H.fetch(base + p, opts).then(function (r) {
       return r.text().then(function (txt) {
         var d;
         try { d = JSON.parse(txt); }
@@ -220,7 +229,7 @@
 
     function buildBody() {
       var body = {
-        name: v.name, agent_id: (H.getSelectedAgentId && H.getSelectedAgentId()) || "default",
+        name: v.name, agent_id: agentId(),
         interval_seconds: v.interval || 60,
         action: v.action || "agent",
         prompt_template: v.prompt_template || "Event fired: [{title}] {event}",
