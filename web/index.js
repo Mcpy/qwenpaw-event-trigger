@@ -72,7 +72,7 @@
       fMaxTriggers: "最大触发次数(0=无限)", fConfig: "参数(CONFIG)",
       cfgAdd: "+ 参数", cfgRemove: "✕", cfgTip: "脚本内 CONFIG 声明的参数;修改后保存会回写脚本并重新校验,启用时以新参数试跑初始化状态。注释不会保留。",
       actionNotify: "通知(不推理)", actionAgent: "Agent 推理",
-      srcTemplate: "从模板", srcScript: "从脚本",
+      srcTemplate: "从模板", srcScript: "从脚本", btnEditScript: "编辑脚本", scrHint: "在独立编辑器中查看/修改脚本;保存后如内容有变更会引导重新校验。此处保存仅更新任务设置。",
       phName: "例如:英伟达突破监控", phPaste: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
       phSession: "留空=独立会话;选择=共用该会话",
       btnCancel: "取 消", btnValidate: "仅校验", btnSave: "保 存",
@@ -230,6 +230,7 @@
           prompt_template: "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)",
           notify_template: "Event: [{title}] {event}"
         });
+        if (editing) setSource("paste");  // edit mode: template tab is disabled
       }
     }, [open, editing]);
 
