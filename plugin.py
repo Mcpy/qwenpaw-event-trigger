@@ -53,11 +53,11 @@ class EventTriggerPlugin:
             await engine.start()
 
         def _shutdown() -> None:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(engine.stop())
-            else:
-                loop.run_until_complete(engine.stop())
+            # synchronous, name-based cancel — create_task(engine.stop()) races
+            # with uninstall (new engine spawns before old loops actually die)
+            for t in asyncio.all_tasks():
+                if t.get_name().startswith("event-trigger:"):
+                    t.cancel()
 
         api.register_startup_hook(hook_name="event_trigger_start", callback=_startup)
         api.register_shutdown_hook(hook_name="event_trigger_stop", callback=_shutdown)
