@@ -150,22 +150,22 @@ class InProcessInjector:
         async def _run() -> None:
             nonlocal final_event
             async for event in ws.stream_query(req):
-                if rt.silent:
-                    continue
-                if rt.dispatch_mode == "stream":
-                    if cm is not None:
-                        await cm.send_event(
-                            channel=rule.dispatch.channel,
-                            user_id=rule.dispatch.user_id,
-                            session_id=rule.dispatch.session_id or req["session_id"],
-                            event=event,
-                            meta={"suppress_console_push": True},
-                        )
-                elif (
+                # always track the completed message (inbox body / return value)
+                if (
                     getattr(event, "object", None) == "message"
                     and _status_completed(getattr(event, "status", None))
                 ):
                     final_event = event
+                if rt.silent:
+                    continue
+                if rt.dispatch_mode == "stream" and cm is not None:
+                    await cm.send_event(
+                        channel=rule.dispatch.channel,
+                        user_id=rule.dispatch.user_id,
+                        session_id=rule.dispatch.session_id or req["session_id"],
+                        event=event,
+                        meta={"suppress_console_push": True},
+                    )
 
         status = "success"
         try:
