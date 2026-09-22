@@ -140,6 +140,7 @@ else:
 3. 持续为真的条件没设滞回或冷却 → 风暴 / Persistent condition without hysteresis/cooldown → storm
 4. 改脚本不重新 PUT → hash 拒跑 / Script edited without re-PUT → hash check refuses
 5. `agent_id` 缺失或错 → 挂错 agent / wrong/missing `agent_id` → lands on wrong agent
+6. **删除任务会同步删除引擎托管的脚本文件**(scripts 目录内;agent 自己写的脚本通常只有这一份)——删除前确认是否需要保留,引用路径模式的外部脚本不受影响 / Deleting a task also deletes its engine-managed script file (often the only copy of an agent-authored script) — confirm before deleting; scripts referenced by path are untouched
 
 ## 最小工作流 / Minimal workflow
 
