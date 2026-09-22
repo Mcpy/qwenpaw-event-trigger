@@ -245,7 +245,7 @@ class Engine:
                 try:
                     from qwenpaw.app.inbox_store import append_event as append_inbox_event
                     await append_inbox_event(
-                        agent_id=rule.agent_id, source_type="event", source_id=rule.id,
+                        agent_id=rule.agent_id, source_type="cron", source_id=rule.id,
                         event_type="event_delivery_failed_fallback", status="error",
                         severity="error",
                         title=f"Event result not delivered: {rule.name}",
@@ -260,7 +260,7 @@ class Engine:
             try:
                 from qwenpaw.app.inbox_store import append_event as append_inbox_event
                 await append_inbox_event(
-                    agent_id=rule.agent_id, source_type="event", source_id=rule.id,
+                    agent_id=rule.agent_id, source_type="cron", source_id=rule.id,
                     event_type="event_result", status="success", severity="info",
                     title=f"Event result: {rule.name}",
                     body=result_text or "(无文本结果)",
