@@ -491,6 +491,25 @@
     var s4 = React.useState(null);
     var runsRule = s4[0], setRunsRule = s4[1];
 
+    // agent-switch auto-refresh (cron parity): the platform has no
+    // agent-changed event for plugin pages, so poll for a selected-agent
+    // change and reload. Also close any open modal/drawer bound to the
+    // previous agent's data.
+    var lastAgentRef = React.useRef(agentId());
+    React.useEffect(function () {
+      var iv = setInterval(function () {
+        var cur = agentId();
+        if (cur !== lastAgentRef.current) {
+          lastAgentRef.current = cur;
+          setModalOpen(false);
+          setRunsRule(null);
+          setEditing(null);
+          load();
+        }
+      }, 800);
+      return function () { clearInterval(iv); };
+    }, []);
+
     function load() {
       api("/").then(function (d) { setRules(d.rules || []); })
         .catch(function (err) { message.error(String(err.message || err).slice(0, 200)); });

@@ -1,10 +1,11 @@
 # AGENT_ISOLATION — v0.3:向 cron 对齐的 per-agent 隔离
 
-- [ ] Repo/Engine/Manager 路径参数化确认(构造已接受任意目录,补 engine 持有 agent_id 用于 task name)
-- [ ] per-agent 引擎注册表(懒创建 + workspace_dir 数据目录 + 迁移钩子)
-- [ ] 路由改造:/api/events/{agent_id}/... 路径段分发(get_agent_for_request 同款逻辑)
-- [ ] 自动迁移:全局 events.json 按 rule.agent_id 分发到各工作区(旧文件备份 .pre-migrate,脚本文件随迁+path 更新)
-- [ ] UI:index.js 按 getSelectedAgentId 调新路径
-- [ ] SKILL.md:新 API 路径 + "只管理自己工作区的任务"
-- [ ] 验证:default 建任务→新路径;小幺 BTC 任务迁移落位;触发走通;旧路径 404
-- [ ] README v0.3 架构段 + push
+- [x] Repo/Engine/Manager 路径参数化(Engine 加 agent_id,task name = event-trigger:{agent}:{rule})
+- [x] per-agent 引擎注册表(plugin._bundles 懒创建;单例守卫退役)
+- [x] 路由改造:/api/events/{agent_id}/... 13 端点;全局资源(templates/protocol)保持 unscoped
+- [x] 自动迁移:eager(启动时 loaded agents)+ lazy(bundle 首访);归档判定移至 startup;旧文件已归档 .pre-migrate
+- [x] UI:index.js api() 按 agentId() 分流(templates/protocol 除外)
+- [x] SKILL.md:新 API 路径 + agent-scoped 说明
+- [x] 验证:BTC 任务迁入小幺工作区(脚本 path 已更新);run_now 765ms 走通;300s 循环 ok;旧 events.json 归档
+- [x] README v0.3 段 + push(v0.3.0,zip 已发)
+- [ ] 遗留:run_now 765ms 那次 fire 完整性(推理推送)待小幺侧确认;市场 zip 更新
