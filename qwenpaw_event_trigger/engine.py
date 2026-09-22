@@ -36,6 +36,9 @@ logger = logging.getLogger("qwenpaw.event_trigger")
 _SCRIPT_ERRORS = (ProtocolError, subprocess.SubprocessError, TimeoutError, OSError)
 
 
+_active_engine: "Engine | None" = None  # process-wide singleton guard
+
+
 class Engine:
     def __init__(self, repo, injector, channel_manager=None):
         self._repo = repo
@@ -51,6 +54,14 @@ class Engine:
         return self._events
 
     async def start(self) -> None:
+        global _active_engine
+        if _active_engine is not None and _active_engine is not self:
+            # hot-reinstall left a previous instance alive: kill its loops
+            try:
+                await _active_engine.stop()
+            except Exception:
+                logger.debug("event-trigger: previous engine stop failed", exc_info=True)
+        _active_engine = self
         for rule in self._events.rules:
             if rule.enabled:
                 self._spawn(rule)
@@ -65,6 +76,11 @@ class Engine:
         old = self._tasks.pop(rule.id, None)
         if old:
             old.cancel()
+        # sweep stray loops from stale engine instances (old router rebirth)
+        want = f"event-trigger:{rule.id}"
+        for t in asyncio.all_tasks():
+            if t.get_name() == want:
+                t.cancel()
         self._tasks[rule.id] = asyncio.create_task(
             self._loop(rule.id), name=f"event-trigger:{rule.id}"
         )
