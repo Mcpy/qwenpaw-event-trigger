@@ -168,7 +168,39 @@ class RuleManager:
         rule = await self._engine.delete_rule(rule_id)
         if rule is None:
             raise RegistrationError(f"unknown rule: {rule_id}")
+        # remove the engine-managed script file (only if inside scripts_dir
+        # and no other rule references the same path)
+        try:
+            path = os.path.realpath(rule.script.path or "")
+            root = os.path.realpath(self.scripts_dir)
+            if path.startswith(root + os.sep):
+                still_used = any(
+                    os.path.realpath(r.script.path or "") == path
+                    for r in self._engine.events.rules
+                )
+                if not still_used and os.path.isfile(path):
+                    await asyncio.to_thread(os.remove, path)
+        except OSError:
+            pass
         return rule
+
+    def gc_orphan_scripts(self) -> int:
+        """Startup GC: remove files in scripts_dir not referenced by any rule."""
+        referenced = {
+            os.path.realpath(r.script.path or "")
+            for r in self._engine.events.rules
+        }
+        removed = 0
+        root = os.path.realpath(self.scripts_dir)
+        for fn in os.listdir(self.scripts_dir):
+            fp = os.path.realpath(os.path.join(self.scripts_dir, fn))
+            if fp.startswith(root + os.sep) and fp not in referenced:
+                try:
+                    os.remove(fp)
+                    removed += 1
+                except OSError:
+                    pass
+        return removed
 
     async def run_now(self, rule_id: str) -> Dict[str, Any]:
         """Manual one-shot check (cron's 'run immediately' counterpart)."""

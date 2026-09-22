@@ -50,6 +50,9 @@ class EventTriggerPlugin:
             for t in _asyncio.all_tasks():
                 if t.get_name().startswith("event-trigger:"):
                     t.cancel()
+            removed = manager.gc_orphan_scripts()
+            if removed:
+                logger.info("event-trigger: GC removed %d orphan script(s)", removed)
             await engine.start()
 
         def _shutdown() -> None:
