@@ -72,7 +72,7 @@
       fMaxTriggers: "最大触发次数(0=无限)", fConfig: "参数(CONFIG)",
       cfgAdd: "+ 参数", cfgRemove: "✕", cfgTip: "脚本内 CONFIG 声明的参数;修改后保存会回写脚本并重新校验,启用时以新参数试跑初始化状态。注释不会保留。",
       actionNotify: "通知(不推理)", actionAgent: "Agent 推理",
-      srcTemplate: "从模板", srcPaste: "粘贴脚本", srcUpload: "上传脚本",
+      srcTemplate: "从模板", srcScript: "从脚本",
       phName: "例如:英伟达突破监控", phPaste: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
       phPath: "/abs/path/checker.py", phSession: "留空=独立会话;选择=共用该会话",
       btnCancel: "取 消", btnValidate: "仅校验", btnSave: "保 存",
@@ -100,7 +100,7 @@
       fMaxTriggers: "Max triggers (0 = unlimited)", fConfig: "Parameters (CONFIG)",
       cfgAdd: "+ Param", cfgRemove: "✕", cfgTip: "Parameters declared in the script's CONFIG block; saving writes them back into the script and re-validates. Enable re-seeds state with the new params. Comments inside CONFIG are not preserved.",
       actionNotify: "Notify (no reasoning)", actionAgent: "Agent reasoning",
-      srcTemplate: "From template", srcPaste: "Paste script", srcPath: "Script path",
+      srcTemplate: "From template", srcScript: "From script",
       phName: "e.g. NVDA breakout watch", phPaste: "Python: read EVENT_STATE, print {triggered:true, title, event, state} to stdout",
       phSession: "Empty = dedicated session; pick to share",
       btnCancel: "Cancel", btnValidate: "Validate only", btnSave: "Save",
@@ -318,23 +318,10 @@
                   onChange: function (ev) { var n = {}; n[pr.k] = ev.target.value; setPv(Object.assign({}, pv, n)); } }));
             })
           ) },
-        { key: "paste", label: T("srcPaste"), children: e("div", null,
-            e("div", { style: { marginBottom: 8 } },
-              e("label", { style: { cursor: "pointer", display: "inline-block" } },
-                e(Input, { type: "file", accept: ".py,.txt", style: { display: "none" },
-                  onChange: function (ev) {
-                    var f = ev.target.files && ev.target.files[0];
-                    if (!f) return;
-                    var rd = new FileReader();
-                    rd.onload = function () { set("script_content")(String(rd.result || "")); };
-                    rd.readAsText(f);
-                    ev.target.value = "";
-                  } }),
-                e(Button, { size: "small" }, T("srcUpload")))),
-            e(TextArea, { rows: 10,
+        { key: "paste", label: T("srcScript"), children: e(TextArea, { rows: 10,
             value: v.script_content || "",
             placeholder: T("phPaste"),
-            onChange: function (ev) { set("script_content")(ev.target.value); } })) }
+            onChange: function (ev) { set("script_content")(ev.target.value); } }) }
       ]
     });
 
