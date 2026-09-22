@@ -91,7 +91,7 @@ class Engine:
         await self._repo.save(self._events)
         await self._repo.append_audit(
             AuditRecord(
-                kind=AuditKind.enable if enabled else AuditKind.enable_off,
+                kind=AuditKind.enable if enabled else AuditKind.disable,
                 rule_id=rule_id,
                 name=rule.name,
             )

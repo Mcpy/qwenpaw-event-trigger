@@ -20,8 +20,12 @@
   var Text = Typography.Text;
 
   function api(p, opts) {
+    // tolerant of non-JSON error bodies (e.g. plain-text 500s)
     return H.fetch("/events" + p, opts).then(function (r) {
-      return r.json().then(function (d) {
+      return r.text().then(function (txt) {
+        var d;
+        try { d = JSON.parse(txt); }
+        catch (e) { throw new Error("HTTP " + r.status + ": " + txt.slice(0, 120)); }
         if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
         return d;
       });
@@ -167,6 +171,7 @@
         setV(editing ? {
           name: editing.name, enabled: editing.enabled,
           interval: editing.interval_seconds, action: editing.action,
+          script_path: editing.script || "",
           channel: (editing.dispatch && editing.dispatch.channel) || "console",
           user_id: (editing.dispatch && editing.dispatch.user_id) || "default",
           session_id: (editing.dispatch && editing.dispatch.session_id) || null,
