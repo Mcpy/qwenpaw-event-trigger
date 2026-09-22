@@ -101,7 +101,7 @@ class RuleManager:
             )
             # (re-)registration starts a FRESH monitoring round:
             # state resets; the dry-run result is validation-only and is discarded
-            self._engine.events.states.setdefault(rule.id, RuleState())
+            self._engine.events.states[rule.id] = RuleState()  # force reset
             await self._repo.save(self._engine.events)
         else:
             warnings.append("validate-only: nothing persisted")
@@ -154,7 +154,7 @@ class RuleManager:
         # condition that is ALREADY true at enable time fires on the first
         # real check (monitoring-system convention), instead of being
         # silently consumed by the validation dry-run.
-        self._engine.events.states.setdefault(rule_id, RuleState())
+        self._engine.events.states[rule_id] = RuleState()  # force reset
         await self._repo.save(self._engine.events)
         return rule
 

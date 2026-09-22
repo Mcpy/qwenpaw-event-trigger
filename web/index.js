@@ -202,7 +202,7 @@
           dispatch_mode: rt.dispatch_mode || "stream",
           silent: !!rt.silent,
           inbox: rt.save_result_to_inbox !== false,
-          prompt_template: "Event fired: [{title}] {event}",
+          prompt_template: "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)",
           notify_template: "Event: [{title}] {event}"
         } : {
           enabled: false, interval: 60, action: "agent",
@@ -210,7 +210,7 @@
           cooldown: 600, script_timeout: 60, timeout: 120, max_triggers: 0, config: {},
           tool_safety: false,
           dispatch_mode: "stream", silent: false, inbox: true,
-          prompt_template: "Event fired: [{title}] {event}",
+          prompt_template: "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)",
           notify_template: "Event: [{title}] {event}"
         });
       }
@@ -296,7 +296,11 @@
       items: [
         { key: "template", label: T("srcTemplate"), disabled: !!editing, children: e("div", null,
             e(Select, { style: { width: "100%", marginBottom: 8 }, value: tplId,
-              onChange: function (x) { setTplId(x); },
+              onChange: function (x) {
+                setTplId(x);
+                var t = tplList.find(function (y) { return y.id === x; });
+                if (t && t.prompt) set("prompt_template")(loc(t.prompt, locale));
+              },
               options: tplList.map(function (t) { return { value: t.id, label: loc(t.name, locale) + " (" + t.id + ")" }; }) }),
             curTpl && curTpl.params.map(function (pr) {
               return e("div", { key: pr.k, style: { marginBottom: 6 } },

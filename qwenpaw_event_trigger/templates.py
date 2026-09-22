@@ -16,6 +16,7 @@ TEMPLATES = [
             {"k": "__THRESHOLD_UP__", "d": "200", "label": {"zh": "上界:涨破触发", "en": "Upper bound: fire when price >= up"}},
             {"k": "__THRESHOLD_DOWN__", "d": "180", "label": {"zh": "下界:跌破触发", "en": "Lower bound: fire when price <= down"}},
         ],
+        "prompt": {"zh": "行情事件:[{title}] {event}\n请先用 Skill 工具阅读 event-tasks 技能,然后:1) 拉取最新行情,判断突破有效性(还是噪声);2) 决定是否提醒用户,若提醒则给出简要分析与依据;3) 若需继续观望,按技能中的『触发-演化循环』更新本任务 CONFIG 并重新启用。", "en": "Market event: [{title}] {event}\nFirst read the event-tasks skill via the Skill tool, then: 1) fetch latest quotes and judge whether the breakout is real; 2) decide whether to notify the user; 3) if watching continues, update this task's CONFIG per the fire-evolve loop in the skill and re-enable."},
         "script": '''#!/usr/bin/env python3
 import json, os, urllib.request
 
@@ -38,7 +39,7 @@ price = float(meta["regularMarketPrice"])
 if armed and (price >= up or price <= down):
     direction = "涨破" if price >= up else "跌破"
     bound = up if price >= up else down
-    print(json.dumps({"triggered": True, "title": CONFIG["ticker"] + " " + direction + " " + str(bound), "event": CONFIG["ticker"] + " 现价 " + str(price) + " USD," + direction + "边界 " + str(bound) + "。请分析行情并决定是否值得提醒我;若需继续观望,请更新本任务 CONFIG 后重新启用。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": CONFIG["ticker"] + " " + direction + " " + str(bound), "event": CONFIG["ticker"] + " 现价 " + str(price) + " USD," + direction + "边界 " + str(bound) + "(当前监控区间 " + str(down) + "~" + str(up) + ")。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
 else:
     print(json.dumps({"triggered": False, "state": {"armed": armed, "last_price": price}}, ensure_ascii=False))
 ''',
@@ -50,6 +51,7 @@ else:
             {"k": "__URL__", "d": "https://example.com/health", "label": {"zh": "探测 URL", "en": "URL to probe"}},
             {"k": "__TIMEOUT__", "d": "10", "label": {"zh": "超时秒数", "en": "Timeout seconds"}},
         ],
+        "prompt": {"zh": "事件:[{title}] {event}\n请先阅读 event-tasks 技能,然后探测该服务实际状态并向用户汇报(含恢复/故障判定与建议)。", "en": "Event: [{title}] {event}\nRead the event-tasks skill first, then probe the service and report status (recovered/down) with suggestions."},
         "script": '''#!/usr/bin/env python3
 import json, os, urllib.request
 
@@ -74,6 +76,7 @@ else:
         "id": "file",
         "name": {"zh": "文件变化监测", "en": "File change monitor"},
         "params": [{"k": "__PATH__", "d": "/path/to/file", "label": {"zh": "文件路径", "en": "File path"}}],
+        "prompt": {"zh": "文件事件:[{title}] {event}\n请先阅读 event-tasks 技能,然后查看该文件的变化内容并向用户汇报要点。", "en": "File event: [{title}] {event}\nRead the event-tasks skill first, inspect what changed in the file and report the key points."},
         "script": '''#!/usr/bin/env python3
 import json, os
 
@@ -100,6 +103,7 @@ else:
             {"k": "__PORT__", "d": "8080", "label": {"zh": "端口", "en": "Port"}},
             {"k": "__TIMEOUT__", "d": "5", "label": {"zh": "超时秒数", "en": "Timeout seconds"}},
         ],
+        "prompt": {"zh": "事件:[{title}] {event}\n请先阅读 event-tasks 技能,然后检查该服务进程/端口状态并向用户汇报(含排查建议)。", "en": "Event: [{title}] {event}\nRead the event-tasks skill first, check the service/port status and report with troubleshooting suggestions."},
         "script": '''#!/usr/bin/env python3
 import json, socket
 
@@ -118,6 +122,7 @@ except Exception as exc:
             {"k": "__FILE__", "d": "/var/log/app.log", "label": {"zh": "日志文件", "en": "Log file"}},
             {"k": "__KEYWORD__", "d": "ERROR", "label": {"zh": "关键字", "en": "Keyword"}},
         ],
+        "prompt": {"zh": "日志事件:[{title}] {event}\n请先阅读 event-tasks 技能,然后分析命中的日志行,向用户汇报错误原因与处理建议。", "en": "Log event: [{title}] {event}\nRead the event-tasks skill first, analyze the matched log lines and report root cause with suggestions."},
         "script": '''#!/usr/bin/env python3
 import json, os
 

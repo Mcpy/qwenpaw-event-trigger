@@ -71,7 +71,7 @@ class EventRule(BaseModel):
     action: ActionKind = ActionKind.agent
 
     # agent action: prompt template; placeholders {title} {event} allowed
-    prompt_template: str = "Event fired: [{title}] {event}"
+    prompt_template: str = "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)"
     # notify action: message template; same placeholders
     notify_template: str = "Event: [{title}] {event}"
 

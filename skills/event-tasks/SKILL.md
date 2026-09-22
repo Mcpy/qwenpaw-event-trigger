@@ -1,6 +1,6 @@
 ---
 name: event-tasks
-description: 仅当需要"条件触发"时使用——外部事件发生(价格突破阈值、文件被修改、HTTP 服务异常、端口不可达、日志出现关键字等)时自动触发推理或通知。/ Use ONLY for condition-triggered automation — when an external event occurs (price crosses a threshold, file modified, HTTP service down, port unreachable, keyword in logs) and you want to fire reasoning or a notification automatically. Managed via the /api/events/ REST API. For time-based schedules use the cron skill instead. / 定时/周期需求请改用 cron skill。
+description: 仅当需要"条件触发"时使用——外部事件发生(价格突破阈值、文件被修改、HTTP 服务异常、端口不可达、日志出现关键字等)时自动触发推理或通知。/ Use ONLY for condition-triggered automation — when an external event occurs (price crosses a threshold, file modified, HTTP service down, port unreachable, keyword in logs) and you want to fire reasoning or a notification automatically. Managed via the /api/events/ REST API — also read this skill before updating a task's CONFIG params or enable/disable. For time-based schedules use the cron skill instead. / 通过 /api/events/ REST 管理;更新任务 CONFIG 参数或启停任务前也应阅读本技能。定时/周期需求请改用 cron skill。
 metadata:
   builtin_skill_version: "1.0"
   qwenpaw:

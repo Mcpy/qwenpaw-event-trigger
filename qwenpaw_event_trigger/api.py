@@ -25,7 +25,7 @@ class RegisterBody(BaseModel):
     script_content: Optional[str] = None
     interpreter: Optional[str] = None
     action: str = "agent"                    # notify | agent
-    prompt_template: str = "Event fired: [{title}] {event}"
+    prompt_template: str = "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)"
     notify_template: str = "Event: [{title}] {event}"
     channel: str = "console"
     user_id: str = "default"

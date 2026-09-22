@@ -98,7 +98,7 @@ class Engine:
         )
         if enabled:
             # new monitoring round: per-round fire counter resets here
-            self._events.states.setdefault(rule_id, RuleState()).trigger_count = 0
+            self._events.states[rule_id] = RuleState()  # fresh round: counter + state reset
             await self._repo.save(self._events)
             self._spawn(rule)
         else:
