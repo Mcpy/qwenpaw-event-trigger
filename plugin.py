@@ -74,7 +74,7 @@ class EventTriggerPlugin:
         self._bundles[agent_id] = bundle
 
         # lazy legacy migration (loaded agents were migrated at startup)
-        from . import migration
+        from qwenpaw_event_trigger import migration
         if migration.legacy_exists(LEGACY_DATA_DIR):
             moved = migration.migrate_agent(
                 LEGACY_DATA_DIR, agent_id, ws.workspace_dir,
@@ -167,7 +167,7 @@ class EventTriggerPlugin:
 
 
 def migration_summary(legacy_dir: str) -> int:
-    from . import migration
+    from qwenpaw_event_trigger import migration
     legacy = migration.load_legacy_events(legacy_dir)
     return len(legacy.rules) if legacy is not None else 0
 
