@@ -201,7 +201,7 @@
           tool_safety: !!rt.tool_safety,
           dispatch_mode: rt.dispatch_mode || "stream",
           silent: !!rt.silent,
-          inbox: rt.save_result_to_inbox !== false,
+          inbox: rt.save_result_to_inbox === true,
           prompt_template: "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)",
           notify_template: "Event: [{title}] {event}"
         } : {
@@ -209,7 +209,7 @@
           channel: "console", user_id: "default", session_id: null,
           cooldown: 600, script_timeout: 60, timeout: 120, max_triggers: 0, config: {},
           tool_safety: false,
-          dispatch_mode: "stream", silent: false, inbox: true,
+          dispatch_mode: "stream", silent: false, inbox: false,
           prompt_template: "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)",
           notify_template: "Event: [{title}] {event}"
         });
@@ -234,7 +234,7 @@
         script_timeout_seconds: v.script_timeout || 60,
         tool_safety: !!v.tool_safety,
         dispatch_mode: v.dispatch_mode || "stream", silent: !!v.silent,
-        save_result_to_inbox: v.inbox !== false,
+        save_result_to_inbox: v.inbox === true,
         enabled: v.enabled !== false
       };
       if (source === "template" && !editing) {
@@ -334,9 +334,6 @@
 
         fi(T("fEnabled"), tt(T, locale, "enabled"), false,
           e(Switch, { checked: v.enabled !== false, onChange: set("enabled") })),
-
-        fi(T("fInbox"), tt(T, locale, "inbox"), false,
-          e(Switch, { checked: v.inbox !== false, disabled: !isAgent, onChange: set("inbox") })),
 
         fi(T("fChecker"), tt(T, locale, "checker"), true, checkerTabs),
         editing ? fi(T("fConfig"), T("cfgTip"), false,

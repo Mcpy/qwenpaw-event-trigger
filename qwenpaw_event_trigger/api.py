@@ -36,7 +36,7 @@ class RegisterBody(BaseModel):
     tool_safety: bool = False
     dispatch_mode: str = "stream"
     silent: bool = False
-    save_result_to_inbox: bool = True
+    save_result_to_inbox: bool = False
     max_triggers: int = 0
     config: Optional[dict] = None
     enabled: bool = False

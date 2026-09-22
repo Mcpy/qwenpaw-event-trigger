@@ -51,7 +51,7 @@ class RuntimeSpec(BaseModel):
     tool_safety: bool = False            # True -> high-risk tools require approval (cron default: off)
     dispatch_mode: Literal["stream", "final"] = "stream"
     silent: bool = False                 # consume stream, no channel delivery (cron parity)
-    save_result_to_inbox: bool = True    # write run result to inbox (cron default: on)
+    save_result_to_inbox: bool = False   #占位:收件箱集成待平台支持第三方来源(INBOX_ENABLED)
 
 
 class ScriptSpec(BaseModel):

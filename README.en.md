@@ -16,7 +16,6 @@ Built against a real gap: [#338 (webhook support, open since 2026-03)](https://g
 - 🛡 **Registration gate**: syntax check → dry-run (executes once for real, seeds state) → content-hash pinning. No script runs without registration; edited scripts are refused until re-validated
 - 🌊 **Anti-storm**: rule-level cooldown + script-level hysteresis (state persisted by the engine and fed back)
 - 🎯 **Two actions**: `notify` (zero tokens) / `agent` (**in-process injection** via `stream_query` — same path as cron, no HTTP/SSE overhead)
-- 📬 **Inbox**: results written to the inbox, failed deliveries fall back automatically (cron's trace mechanism)
 - 📡 **Dispatch modes**: `stream` (per-event forwarding) / `final`; silent delivery supported
 - 🌍 **Bilingual**: UI / agent skill / template metadata (zh/en)
 - 📦 **5 bundled templates**: stock threshold (NVDA via Yahoo) / HTTP probe / file change / port alive / log keyword

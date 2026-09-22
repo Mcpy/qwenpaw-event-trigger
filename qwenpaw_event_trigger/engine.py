@@ -223,6 +223,12 @@ class Engine:
             event=out.get("event") or "",
         )
 
+    # Inbox integration is CODED but DISABLED: the console inbox UI only renders
+    # known source_types (cron/subagents/memory...) — a custom "event" source is
+    # counted by the unread badge but never listed, and breaks mark-all-read.
+    # Flip to True once the platform inbox supports third-party sources.
+    INBOX_ENABLED = False
+
     async def _fire(self, rule: EventRule, out: Dict[str, Any]) -> None:
         title = out.get("title") or "event"
         result_text = ""
@@ -241,11 +247,11 @@ class Engine:
                 RunRecord(rule_id=rule.id, kind="error", ok=False, detail=f"fire: {e!r}")
             )
             # delivery-failure fallback to inbox (cron parity)
-            if rule.runtime.save_result_to_inbox:
+            if INBOX_ENABLED and rule.runtime.save_result_to_inbox:
                 try:
                     from qwenpaw.app.inbox_store import append_event as append_inbox_event
                     await append_inbox_event(
-                        agent_id=rule.agent_id, source_type="cron", source_id=rule.id,
+                        agent_id=rule.agent_id, source_type="event", source_id=rule.id,
                         event_type="event_delivery_failed_fallback", status="error",
                         severity="error",
                         title=f"Event result not delivered: {rule.name}",
@@ -256,11 +262,11 @@ class Engine:
                     logger.debug("event-trigger: inbox fallback failed", exc_info=True)
             return
         # success: result entry to inbox (cron parity; body = real reply text)
-        if rule.runtime.save_result_to_inbox:
+        if INBOX_ENABLED and rule.runtime.save_result_to_inbox:
             try:
                 from qwenpaw.app.inbox_store import append_event as append_inbox_event
                 await append_inbox_event(
-                    agent_id=rule.agent_id, source_type="cron", source_id=rule.id,
+                    agent_id=rule.agent_id, source_type="event", source_id=rule.id,
                     event_type="event_result", status="success", severity="info",
                     title=f"Event result: {rule.name}",
                     body=result_text or "(无文本结果)",
