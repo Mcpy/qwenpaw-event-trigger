@@ -198,7 +198,6 @@
           config: editing.config || {},
           script_timeout: rt.script_timeout_seconds || 60,
           timeout: rt.timeout_seconds || 120,
-          share_session: !!rt.share_session,
           tool_safety: !!rt.tool_safety,
           dispatch_mode: rt.dispatch_mode || "stream",
           silent: !!rt.silent,
@@ -209,7 +208,7 @@
           enabled: false, interval: 60, action: "agent",
           channel: "console", user_id: "default", session_id: null,
           cooldown: 600, script_timeout: 60, timeout: 120, max_triggers: 0, config: {},
-          share_session: false, tool_safety: false,
+          tool_safety: false,
           dispatch_mode: "stream", silent: false, inbox: true,
           prompt_template: "Event fired: [{title}] {event}",
           notify_template: "Event: [{title}] {event}"
@@ -233,7 +232,7 @@
         config: editing ? coerceConfig(v.config) : undefined,
         timeout_seconds: v.timeout || 120,
         script_timeout_seconds: v.script_timeout || 60,
-        share_session: !!v.share_session, tool_safety: !!v.tool_safety,
+        tool_safety: !!v.tool_safety,
         dispatch_mode: v.dispatch_mode || "stream", silent: !!v.silent,
         save_result_to_inbox: v.inbox !== false,
         enabled: v.enabled !== false
@@ -403,9 +402,6 @@
 
         fi(T("fSilent"), tt(T, locale, "silentDelivery"), false,
           e(Switch, { checked: !!v.silent, disabled: !isAgent, onChange: set("silent") })),
-
-        fi(T("fShare"), tt(T, locale, "shareSession"), false,
-          e(Switch, { checked: !!v.share_session, onChange: set("share_session") })),
 
         fi(T("fToolSafety"), tt(T, locale, "toolSafety"), false,
           e(Switch, { checked: !!v.tool_safety, onChange: set("tool_safety") })),

@@ -205,6 +205,8 @@ class RuleManager:
                     "runtime": r.runtime.model_dump(),
                     "cooldown_seconds": r.runtime.cooldown_seconds,
                     "config": self._safe_config(r),
+                    "prompt_template": r.prompt_template,
+                    "notify_template": r.notify_template,
                     "run_count": st.run_count,
                     "trigger_count": st.trigger_count,
                     "last_run_at": st.last_run_at,

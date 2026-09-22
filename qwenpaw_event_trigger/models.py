@@ -48,7 +48,6 @@ class RuntimeSpec(BaseModel):
     script_timeout_seconds: int = Field(default=60, ge=1)  # checker script timeout
     cooldown_seconds: int = Field(default=0, ge=0)         # suppress re-fire after a trigger
     max_triggers: int = Field(default=0, ge=0)             # 0 = unlimited; N = auto-disable after N fires
-    share_session: bool = False          # False -> dedicated accumulating session (cron parity)
     tool_safety: bool = False            # True -> high-risk tools require approval (cron default: off)
     dispatch_mode: Literal["stream", "final"] = "stream"
     silent: bool = False                 # consume stream, no channel delivery (cron parity)

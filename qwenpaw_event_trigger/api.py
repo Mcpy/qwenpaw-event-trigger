@@ -33,7 +33,6 @@ class RegisterBody(BaseModel):
     cooldown_seconds: int = 0
     timeout_seconds: int = 120
     script_timeout_seconds: int = 60
-    share_session: bool = False
     tool_safety: bool = False
     dispatch_mode: str = "stream"
     silent: bool = False
@@ -72,7 +71,6 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
             timeout_seconds=body.timeout_seconds,
             script_timeout_seconds=body.script_timeout_seconds,
             cooldown_seconds=body.cooldown_seconds,
-            share_session=body.share_session,
             tool_safety=body.tool_safety,
             dispatch_mode=body.dispatch_mode,
             silent=body.silent,

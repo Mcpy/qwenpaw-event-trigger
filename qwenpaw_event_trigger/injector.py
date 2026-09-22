@@ -71,12 +71,9 @@ class InProcessInjector:
         return self._channel_manager(self._workspace(agent_id))
 
     def _session_id(self, rule: EventRule) -> str:
-        d = rule.dispatch
-        target = d.session_id
-        if rule.runtime.share_session:
-            return target or f"event:{rule.id}"
-        # dedicated accumulating session per rule (cron parity)
-        return f"{target}:event:{rule.id}" if target else f"event:{rule.id}"
+        """Chosen session = shared (context + delivery); empty = dedicated
+        accumulating session per rule (event:{id})."""
+        return rule.dispatch.session_id or f"event:{rule.id}"
 
     async def fire(self, rule: EventRule, prompt: str, out: Dict[str, Any]) -> str:
         """Run one agent turn for the fired event. Returns final text."""
