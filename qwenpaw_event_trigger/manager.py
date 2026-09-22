@@ -48,28 +48,56 @@ class RuleManager:
 
     # ---- registration gate ----
 
+    def _resolve_script_rel(self, script_rel: str) -> str:
+        """Validate a by-reference script name: bare .py file already present
+        in scripts_dir. Blocks traversal (basename-only, no separators)."""
+        if (not script_rel or script_rel != os.path.basename(script_rel)
+                or script_rel in (".", "..") or script_rel.startswith(".")
+                or "/" in script_rel or "\\" in script_rel):
+            raise RegistrationError(
+                "script_rel must be a bare file name inside event_trigger/scripts/")
+        if not script_rel.endswith(".py"):
+            raise RegistrationError("script_rel must end with .py")
+        if not os.path.isfile(os.path.join(self.scripts_dir, script_rel)):
+            raise RegistrationError(
+                f"script not found in event_trigger/scripts/: {script_rel}")
+        return script_rel
+
     async def register(
         self,
         rule: EventRule,
         script_content: Optional[str] = None,
         *,
+        script_rel: Optional[str] = None,
         validate_only: bool = False,
     ) -> Tuple[EventRule, List[str]]:
-        """Validate (and optionally persist) a rule. Returns (rule, warnings)."""
+        """Validate (and optionally persist) a rule. Returns (rule, warnings).
+
+        Script source: ``script_content`` (inline, written to scripts_dir) or
+        ``script_rel`` (by reference: bare file name already in scripts_dir,
+        e.g. written via the platform file page). Exactly one is expected.
+        """
         warnings: List[str] = []
 
+        if script_content is not None and script_rel:
+            raise RegistrationError(
+                "script_content and script_rel are mutually exclusive")
         if script_content is not None:
             fname = f"{rule.id}_{_safe_name(rule.name)}.py"
             rule.script.path = os.path.join(self.scripts_dir, fname)
             with open(rule.script.path, "w", encoding="utf-8") as f:
                 f.write(script_content)
+        elif script_rel:
+            fname = self._resolve_script_rel(script_rel)
+            rule.script.path = os.path.join(self.scripts_dir, fname)
+            # by-reference: file already exists, never rewritten here
 
         path = rule.script.path
         if not path or not os.path.isfile(path):
             # v0.3.2: script_path mode retired — all scripts are engine-managed
             raise RegistrationError(
-                "script_content required: all scripts are engine-managed "
-                "under event_trigger/scripts/"
+                "script_content or script_rel required: all scripts are "
+                "engine-managed under event_trigger/scripts/"
             )
         if not os.path.isabs(path):
             raise RegistrationError("script path must be absolute")
@@ -115,11 +143,18 @@ class RuleManager:
     async def update(
         self, rule: EventRule, script_content: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
+        script_rel: Optional[str] = None,
     ) -> Tuple[EventRule, List[str]]:
         old = self._engine.events.get(rule.id)
         if not old:
             raise RegistrationError(f"unknown rule: {rule.id}")
         rule.created_at = old.created_at
+        if script_rel is not None:
+            # rebind: point the rule at an existing scripts/ file;
+            # content is never rewritten, hash re-pins in register()
+            fname = self._resolve_script_rel(script_rel)
+            rule.script.path = os.path.join(self.scripts_dir, fname)
+            script_content = None
         if config is not None:
             path = rule.script.path or old.script.path
             rule.script.path = path

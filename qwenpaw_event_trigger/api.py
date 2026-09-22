@@ -38,6 +38,8 @@ from .protocol import PROTOCOL_DOC
 
 class RegisterBody(BaseModel):
     """Rule payload. Scripts are engine-managed: pass ``script_content``
+    (inline) or ``script_rel`` (bare .py file name already in
+    event_trigger/scripts/, e.g. written via the platform file page)
     (inline, template-instantiated, or uploaded content) — it is written
     under the agent's ``event_trigger/scripts/`` and hash-pinned.
     ``agent_id`` comes from the URL path; the body field is accepted for
@@ -47,6 +49,7 @@ class RegisterBody(BaseModel):
     agent_id: str = ""                        # ignored — path wins
     interval_seconds: int = 60
     script_content: Optional[str] = None
+    script_rel: Optional[str] = None
     interpreter: Optional[str] = None
     action: str = "agent"                    # notify | agent
     prompt_template: str = "Event fired: [{title}] {event}\n(处理本事件前,请先通过 Skill 工具阅读 event-tasks 技能 / read the event-tasks skill first)"
@@ -193,13 +196,16 @@ def build_router(
     @router.post("/{agent_id}/")
     async def register_rule(agent_id: str, body: RegisterBody,
                             validate_only: bool = False):
-        if not body.script_content:
-            raise HTTPException(400, "script_content required (all scripts are engine-managed)")
+        if not body.script_content and not body.script_rel:
+            raise HTTPException(400, "script_content or script_rel required "
+                                "(script_rel = bare .py file name already in "
+                                "event_trigger/scripts/)")
         bundle = await _bundle(agent_id)
         rule = _rule_from_body(None, body, agent_id)
         try:
             rule, warnings = await bundle.manager.register(
-                rule, body.script_content, validate_only=validate_only
+                rule, body.script_content, script_rel=body.script_rel,
+                validate_only=validate_only
             )
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
@@ -215,7 +221,8 @@ def build_router(
         rule = _rule_from_body(rule_id, body, agent_id, existing)
         try:
             rule, warnings = await bundle.manager.update(
-                rule, body.script_content, config=body.config)
+                rule, body.script_content, config=body.config,
+                script_rel=body.script_rel)
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
         return {"ok": True, "warnings": warnings}
