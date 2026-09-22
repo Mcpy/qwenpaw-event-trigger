@@ -103,7 +103,7 @@
       fMaxTriggers: "Max triggers (0 = unlimited)", fConfig: "Parameters (CONFIG)",
       cfgAdd: "+ Param", cfgRemove: "✕", cfgTip: "Parameters declared in the script's CONFIG block; saving writes them back into the script and re-validates. Enable re-seeds state with the new params. Comments inside CONFIG are not preserved.",
       actionNotify: "Notify (no reasoning)", actionAgent: "Agent reasoning",
-      srcTemplate: "From template", srcScript: "From script",
+      srcTemplate: "From template", srcScript: "From script", btnEditScript: "Edit script", scrHint: "View/modify the script in a dedicated editor; saving a changed script walks you through re-validation. This form saves task settings only.",
       phName: "e.g. NVDA breakout watch", phPaste: "Python: read EVENT_STATE, print {triggered:true, title, event, state} to stdout",
       phSession: "Empty = dedicated session; pick to share",
       btnCancel: "Cancel", btnValidate: "Validate only", btnSave: "Save",
@@ -186,6 +186,8 @@
     var pv = stP[0], setPv = stP[1];
     var stS = React.useState(false);
     var saving = stS[0], setSaving = stS[1];
+    var stScr = React.useState(false);
+    var scrOpen = stScr[0], setScrOpen = stScr[1];
     var stT = React.useState({ channels: ["console"], items: [], templates: [] });
     var targets = stT[0], setTargets = stT[1];
 
@@ -262,7 +264,7 @@
           });
           body.script_content = s;
         }
-      } else if (source === "paste") {
+      } else if (source === "paste" && !editing) {
         body.script_content = v.script_content || "";
       }
       return body;
@@ -321,10 +323,14 @@
                   onChange: function (ev) { var n = {}; n[pr.k] = ev.target.value; setPv(Object.assign({}, pv, n)); } }));
             })
           ) },
-        { key: "paste", label: T("srcScript"), children: e(TextArea, { rows: 10,
-            value: v.script_content || "",
-            placeholder: T("phPaste"),
-            onChange: function (ev) { set("script_content")(ev.target.value); } }) }
+        { key: "paste", label: T("srcScript"), children: editing
+            ? e("div", null,
+                e(Button, { onClick: function () { setScrOpen(true); } }, T("btnEditScript")),
+                e("div", { style: { fontSize: 12, opacity: 0.6, marginTop: 6 } }, T("scrHint")))
+            : e(TextArea, { rows: 10,
+                value: v.script_content || "",
+                placeholder: T("phPaste"),
+                onChange: function (ev) { set("script_content")(ev.target.value); } }) }
       ]
     });
 
@@ -332,6 +338,9 @@
       open: open, title: editing ? T("modalEdit") : T("modalCreate"),
       width: 640, onCancel: onClose, footer: null, destroyOnClose: true,
     },
+      editing ? e(ScriptModal, { open: scrOpen && !!editing, rule: editing,
+        onClose: function () { setScrOpen(false); },
+        onSaved: function () { setScrOpen(false); onClose(); onSaved(); } }) : null,
       e("div", { style: { maxHeight: "62vh", overflow: "auto", paddingRight: 4 } },
 
         editing ? fi(T("fId"), tt(T, locale, "id"), false,
@@ -574,8 +583,6 @@
     var editing = s3[0], setEditing = s3[1];
     var s4 = React.useState(null);
     var runsRule = s4[0], setRunsRule = s4[1];
-    var s5 = React.useState(null);
-    var scrRule = s5[0], setScrRule = s5[1];
 
     // agent-switch auto-refresh (cron parity): the platform has no
     // agent-changed event for plugin pages, so poll for a selected-agent
@@ -638,7 +645,6 @@
           return e(Space, { size: 2 },
             e(Button, { size: "small", onClick: function () { runNow(r); } }, T("btnRun")),
             e(Button, { size: "small", onClick: function () { setRunsRule(r); } }, T("btnRuns")),
-            e(Button, { size: "small", onClick: function () { setScrRule(r); } }, T("btnScript")),
             e(Button, { size: "small", type: "link", onClick: function () { setEditing(r); setModalOpen(true); } }, T("btnEdit")),
             e(Popconfirm, { title: T("deleteConfirm"), onConfirm: function () { del(r); } },
               e(Button, { size: "small", type: "link", danger: true }, T("btnDelete"))));
@@ -664,9 +670,7 @@
       e(RuleFormModal, { open: modalOpen, editing: editing,
         onClose: function () { setModalOpen(false); },
         onSaved: function () { setModalOpen(false); load(); } }),
-      e(RunsDrawer, { rule: runsRule, onClose: function () { setRunsRule(null); } }),
-      e(ScriptModal, { open: !!scrRule, rule: scrRule, agentId: agentId(),
-        onClose: function () { setScrRule(null); }, onSaved: function () { load(); } })
+      e(RunsDrawer, { rule: runsRule, onClose: function () { setRunsRule(null); } })
     );
   }
 
