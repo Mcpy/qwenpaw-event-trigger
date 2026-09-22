@@ -99,10 +99,10 @@ class RuleManager:
             await self._engine.upsert_rule(
                 rule, audit_detail=f"hash={rule.script.content_hash[:12]}"
             )
-            st = self._engine.events.states.get(rule.id)
-            if st is not None and not st.state and isinstance(out.get("state"), dict):
-                st.state = out["state"]
-                await self._repo.save(self._engine.events)
+            # (re-)registration starts a FRESH monitoring round:
+            # state resets; the dry-run result is validation-only and is discarded
+            self._engine.events.states.setdefault(rule.id, RuleState())
+            await self._repo.save(self._engine.events)
         else:
             warnings.append("validate-only: nothing persisted")
         return rule, warnings
@@ -150,9 +150,11 @@ class RuleManager:
         except Exception as e:
             raise RegistrationError(f"启用校验崩溃: {e!r}") from e
         rule.script.content_hash = await asyncio.to_thread(compute_hash, path)
-        st = self._engine.events.states.setdefault(rule_id, RuleState())
-        if isinstance(out.get("state"), dict):
-            st.state = out["state"]  # new round: state re-seeded by dry-run
+        # (re-)enable starts a FRESH monitoring round: state resets, so a
+        # condition that is ALREADY true at enable time fires on the first
+        # real check (monitoring-system convention), instead of being
+        # silently consumed by the validation dry-run.
+        self._engine.events.states.setdefault(rule_id, RuleState())
         await self._repo.save(self._engine.events)
         return rule
 
