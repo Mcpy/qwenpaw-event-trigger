@@ -38,6 +38,7 @@ class RuleManager:
     def __init__(self, engine: Engine, repo, data_dir: str):
         self._engine = engine
         self._repo = repo
+        self._data_dir = data_dir
         self.scripts_dir = os.path.join(data_dir, "scripts")
         os.makedirs(self.scripts_dir, exist_ok=True)
 
@@ -65,7 +66,11 @@ class RuleManager:
 
         path = rule.script.path
         if not path or not os.path.isfile(path):
-            raise RegistrationError(f"script not found: {path}")
+            # v0.3.2: script_path mode retired — all scripts are engine-managed
+            raise RegistrationError(
+                "script_content required: all scripts are engine-managed "
+                "under event_trigger/scripts/"
+            )
         if not os.path.isabs(path):
             raise RegistrationError("script path must be absolute")
 
@@ -225,6 +230,14 @@ class RuleManager:
         out: List[Dict[str, Any]] = []
         for r in self._engine.events.rules:
             st: RuleState = self._engine.events.states.get(r.id, RuleState())
+            path = r.script.path or ""
+            managed = bool(path) and os.path.realpath(path).startswith(
+                os.path.realpath(self._data_dir) + os.sep
+            )
+            try:
+                rel = os.path.relpath(path, os.path.dirname(self._data_dir)) if managed else None
+            except ValueError:
+                rel = None
             out.append(
                 {
                     "id": r.id,
@@ -233,7 +246,9 @@ class RuleManager:
                     "agent_id": r.agent_id,
                     "interval_seconds": r.poll.interval_seconds,
                     "action": r.action.value,
-                    "script": r.script.path,
+                    "script": path,
+                    "script_rel": rel,
+                    "managed": managed,
                     "script_hash": r.script.content_hash[:12],
                     "dispatch": r.dispatch.model_dump(),
                     "runtime": r.runtime.model_dump(),

@@ -37,15 +37,15 @@ from .protocol import PROTOCOL_DOC
 
 
 class RegisterBody(BaseModel):
-    """Rule payload. Either give an absolute script path, or inline content
-    (preferred for agent-authored rules — server writes it under its
-    controlled scripts dir).  ``agent_id`` comes from the URL path; the body
-    field is accepted for backward compatibility but ignored."""
+    """Rule payload. Scripts are engine-managed: pass ``script_content``
+    (inline, template-instantiated, or uploaded content) — it is written
+    under the agent's ``event_trigger/scripts/`` and hash-pinned.
+    ``agent_id`` comes from the URL path; the body field is accepted for
+    backward compatibility but ignored."""
 
     name: str
     agent_id: str = ""                        # ignored — path wins
     interval_seconds: int = 60
-    script_path: Optional[str] = None
     script_content: Optional[str] = None
     interpreter: Optional[str] = None
     action: str = "agent"                    # notify | agent
@@ -77,7 +77,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, agent_id: str,
         ScriptSpec,
     )
 
-    script_path = body.script_path or (existing.script.path if existing else "")
+    script_path = existing.script.path if existing else ""
     kwargs: dict = dict(
         name=body.name,
         agent_id=agent_id,
@@ -193,8 +193,8 @@ def build_router(
     @router.post("/{agent_id}/")
     async def register_rule(agent_id: str, body: RegisterBody,
                             validate_only: bool = False):
-        if not body.script_path and not body.script_content:
-            raise HTTPException(400, "script_path or script_content required")
+        if not body.script_content:
+            raise HTTPException(400, "script_content required (all scripts are engine-managed)")
         bundle = await _bundle(agent_id)
         rule = _rule_from_body(None, body, agent_id)
         try:

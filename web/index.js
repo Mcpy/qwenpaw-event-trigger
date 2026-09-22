@@ -60,7 +60,7 @@
       menu: "事件任务", crumb: "控制 / ", create: "+ 创建任务",
       colTask: "任务", colInterval: "间隔", colCounters: "运行/触发", colLastRun: "上次运行",
       colEnabled: "启用", colActions: "操作",
-      btnRun: "▶ 执行", btnRuns: "记录", btnEdit: "编辑", btnDelete: "删除",
+      btnRun: "▶ 执行", btnRuns: "记录", btnEdit: "编辑", btnDelete: "删除", btnScript: "脚本",
       runNowOk: "已执行一次检查", deleteConfirm: "删除该任务?将同步删除其脚本文件(不可恢复)",
       modalCreate: "创建事件任务", modalEdit: "编辑事件任务(热更新)",
       fId: "任务ID", fName: "任务名称", fEnabled: "启用状态", fInbox: "运行结果存进收件箱",
@@ -72,7 +72,7 @@
       fMaxTriggers: "最大触发次数(0=无限)", fConfig: "参数(CONFIG)",
       cfgAdd: "+ 参数", cfgRemove: "✕", cfgTip: "脚本内 CONFIG 声明的参数;修改后保存会回写脚本并重新校验,启用时以新参数试跑初始化状态。注释不会保留。",
       actionNotify: "通知(不推理)", actionAgent: "Agent 推理",
-      srcTemplate: "从模板", srcPaste: "粘贴脚本", srcPath: "引用路径",
+      srcTemplate: "从模板", srcPaste: "粘贴脚本", srcUpload: "上传脚本",
       phName: "例如:英伟达突破监控", phPaste: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
       phPath: "/abs/path/checker.py", phSession: "留空=独立会话;选择=共用该会话",
       btnCancel: "取 消", btnValidate: "仅校验", btnSave: "保 存",
@@ -88,7 +88,7 @@
       menu: "Event Tasks", crumb: "Control / ", create: "+ Create Task",
       colTask: "Task", colInterval: "Interval", colCounters: "Runs/Fires", colLastRun: "Last run",
       colEnabled: "Enabled", colActions: "Actions",
-      btnRun: "▶ Run", btnRuns: "History", btnEdit: "Edit", btnDelete: "Delete",
+      btnRun: "▶ Run", btnRuns: "History", btnEdit: "Edit", btnDelete: "Delete", btnScript: "Script",
       runNowOk: "One check executed", deleteConfirm: "Delete this task? Its engine-managed script file will also be deleted (irreversible)",
       modalCreate: "Create Event Task", modalEdit: "Edit Event Task (hot update)",
       fId: "Task ID", fName: "Task name", fEnabled: "Enabled", fInbox: "Save results to inbox",
@@ -102,12 +102,15 @@
       actionNotify: "Notify (no reasoning)", actionAgent: "Agent reasoning",
       srcTemplate: "From template", srcPaste: "Paste script", srcPath: "Script path",
       phName: "e.g. NVDA breakout watch", phPaste: "Python: read EVENT_STATE, print {triggered:true, title, event, state} to stdout",
-      phPath: "/abs/path/checker.py", phSession: "Empty = dedicated session; pick to share",
+      phSession: "Empty = dedicated session; pick to share",
       btnCancel: "Cancel", btnValidate: "Validate only", btnSave: "Save",
       alertGate: "Saving runs the registration gate: syntax check → dry-run (executes once for real and seeds state) → content-hash pinning; any script change re-validates.",
+      scrTitle: "View/edit script: ", scrEdit: "Edit", scrPreview: "Preview", scrSave: "Save script",
+      scrSaved: "Script saved", scrConflict: "File changed externally — reload and retry", scrRevalidate: "Script modified: the engine refuses it until re-validated (disable → enable). Re-validate and enable now?",
+      scrRevalidateOk: "Re-validated and enabled", scrLoadFail: "Failed to load script: ", scrNoManage: "External script path (legacy) — inline editing unavailable",
       drawerTitle: "Run history: ", showAll: "Show all (incl. check/cooldown-skipped)", noRuns: "No records yet",
       saved: "Saved", validated: "Validation passed", targetsFail: "Failed to load dispatch targets: ",
-      nameRequired: "Task name is required", pasteRequired: "Paste the script content", pathRequired: "Script path is required",
+      nameRequired: "Task name is required", pasteRequired: "Paste the script content",
       notify: "notify", agent: "agent",
       expandedScript: "Script: ", expandedDeliver: "Dispatch: ", expandedCooldown: " · Cooldown: ",
       kindTrigger: "🔥 Fired", kindError: "🔴 Error", kindCheck: "Check", kindSkipped: "⏸ Cooldown-skipped"
@@ -258,8 +261,6 @@
         }
       } else if (source === "paste") {
         body.script_content = v.script_content || "";
-      } else if (source === "path") {
-        body.script_path = v.script_path || (editing ? editing.script : "");
       }
       return body;
     }
@@ -267,7 +268,6 @@
     function submit(validateOnly) {
       if (!v.name) { message.error(T("nameRequired")); return; }
       if (source === "paste" && !(v.script_content || "").trim()) { message.error(T("pasteRequired")); return; }
-      if (source === "path" && !(v.script_path || "").trim()) { message.error(T("pathRequired")); return; }
       setSaving(true);
       var body = buildBody();
       var url = editing ? ("/" + editing.id + "?validate_only=" + validateOnly) : ("/?validate_only=" + validateOnly);
@@ -318,14 +318,23 @@
                   onChange: function (ev) { var n = {}; n[pr.k] = ev.target.value; setPv(Object.assign({}, pv, n)); } }));
             })
           ) },
-        { key: "paste", label: T("srcPaste"), children: e(TextArea, { rows: 10,
+        { key: "paste", label: T("srcPaste"), children: e("div", null,
+            e("div", { style: { marginBottom: 8 } },
+              e("label", { style: { cursor: "pointer", display: "inline-block" } },
+                e(Input, { type: "file", accept: ".py,.txt", style: { display: "none" },
+                  onChange: function (ev) {
+                    var f = ev.target.files && ev.target.files[0];
+                    if (!f) return;
+                    var rd = new FileReader();
+                    rd.onload = function () { set("script_content")(String(rd.result || "")); };
+                    rd.readAsText(f);
+                    ev.target.value = "";
+                  } }),
+                e(Button, { size: "small" }, T("srcUpload")))),
+            e(TextArea, { rows: 10,
             value: v.script_content || "",
             placeholder: T("phPaste"),
-            onChange: function (ev) { set("script_content")(ev.target.value); } }) },
-        { key: "path", label: T("srcPath"), children: e(Input, {
-            value: v.script_path || (editing ? editing.script : ""),
-            placeholder: T("phPath"),
-            onChange: function (ev) { set("script_path")(ev.target.value); } }) }
+            onChange: function (ev) { set("script_content")(ev.target.value); } })) }
       ]
     });
 
@@ -479,6 +488,91 @@
   }
 
   /* ================= main page ================= */
+  /* ---- script viewer/editor (platform file-content API, ETag-guarded) ---- */
+  function pfetch(p, opts) {
+    // platform workspace files API — same channel as api(), different prefix;
+    // X-Agent-Id selects the agent workspace (platform auth boundary)
+    opts = opts || {};
+    opts.headers = Object.assign({ "X-Agent-Id": agentId() }, opts.headers || {});
+    return H.fetch(p, opts).then(function (r) {
+      return r.text().then(function (txt) {
+        var d;
+        try { d = JSON.parse(txt); }
+        catch (e) { throw new Error("HTTP " + r.status + ": " + txt.slice(0, 120)); }
+        if (!r.ok) throw new Error((d && d.detail) || ("HTTP " + r.status));
+        return d;
+      });
+    });
+  }
+  function sha12(text) {
+    return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+      .then(function (buf) {
+        var hex = Array.prototype.map.call(new Uint8Array(buf),
+          function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+        return hex.slice(0, 12);
+      });
+  }
+  function ScriptModal(props) {
+    var rule = props.rule, open = props.open, onClose = props.onClose,
+        onSaved = props.onSaved, agentId = props.agentId;
+    var s1 = React.useState(""); var content = s1[0], setContent = s1[1];
+    var s2 = React.useState(""); var etag = s2[0], setEtag = s2[1];
+    var s3 = React.useState(false); var editing = s3[0], setEditing = s3[1];
+    var s4 = React.useState(false); var saving = s4[0], setSaving = s4[1];
+    var locale = H.useLocale ? H.useLocale() : NAV_LANG;
+    var T = mkT(locale);
+
+    React.useEffect(function () {
+      if (!open || !rule || !rule.script_rel) return;
+      pfetch("/workspace/file-content?root=workspace&path=" +
+             encodeURIComponent(rule.script_rel) + "&limit=1048576")
+        .then(function (d) { setContent(d.content || ""); setEtag(d.etag || ""); })
+        .catch(function (err) { message.error(T("scrLoadFail") + String(err.message || err).slice(0, 160)); });
+    }, [open, rule && rule.id]);
+
+    function save() {
+      setSaving(true);
+      pfetch("/workspace/file-content?root=workspace&path=" +
+             encodeURIComponent(rule.script_rel),
+        { method: "PUT",
+          headers: { "Content-Type": "application/json", "If-Match": etag },
+          body: JSON.stringify({ content: content }) })
+        .then(function (d) {
+          setEtag(d.etag || "");
+          return sha12(content).then(function (h12) {
+            setEditing(false);
+            message.success(T("scrSaved"));
+            if (h12 !== rule.script_hash) {
+              var doRe = function () {
+                api("/" + rule.id + "/enable", { method: "POST" })
+                  .then(function () { message.success(T("scrRevalidateOk")); onSaved(); })
+                  .catch(function (err) { message.error(String(err.message || err).slice(0, 200)); });
+              };
+              Modal.confirm({ title: T("scrRevalidate"), onOk: doRe, onCancel: onSaved });
+            } else { onSaved(); }
+          });
+        })
+        .catch(function (err) { message.error(String(err.message || err).slice(0, 200)); })
+        .finally(function () { setSaving(false); });
+    }
+
+    if (!open || !rule) return null;
+    return e(Modal, {
+      open: true, width: 860,
+      title: T("scrTitle") + (rule.name || rule.id),
+      onCancel: onClose, destroyOnClose: true,
+      footer: [
+        e(Button, { key: "toggle", onClick: function () { setEditing(!editing); } },
+          editing ? T("scrPreview") : T("scrEdit")),
+        e(Button, { key: "save", type: "primary", loading: saving, disabled: !editing, onClick: save },
+          T("scrSave")),
+      ],
+    },
+      e(TextArea, { rows: 24, value: content, readOnly: !editing,
+        style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 },
+        onChange: function (ev) { setContent(ev.target.value); } }));
+  }
+
   function RulesPage() {
     var locale = H.useLocale ? H.useLocale() : NAV_LANG;
     var T = mkT(locale);
@@ -490,6 +584,8 @@
     var editing = s3[0], setEditing = s3[1];
     var s4 = React.useState(null);
     var runsRule = s4[0], setRunsRule = s4[1];
+    var s5 = React.useState(null);
+    var scrRule = s5[0], setScrRule = s5[1];
 
     // agent-switch auto-refresh (cron parity): the platform has no
     // agent-changed event for plugin pages, so poll for a selected-agent
@@ -552,6 +648,7 @@
           return e(Space, { size: 2 },
             e(Button, { size: "small", onClick: function () { runNow(r); } }, T("btnRun")),
             e(Button, { size: "small", onClick: function () { setRunsRule(r); } }, T("btnRuns")),
+            e(Button, { size: "small", onClick: function () { setScrRule(r); } }, T("btnScript")),
             e(Button, { size: "small", type: "link", onClick: function () { setEditing(r); setModalOpen(true); } }, T("btnEdit")),
             e(Popconfirm, { title: T("deleteConfirm"), onConfirm: function () { del(r); } },
               e(Button, { size: "small", type: "link", danger: true }, T("btnDelete"))));
@@ -577,7 +674,9 @@
       e(RuleFormModal, { open: modalOpen, editing: editing,
         onClose: function () { setModalOpen(false); },
         onSaved: function () { setModalOpen(false); load(); } }),
-      e(RunsDrawer, { rule: runsRule, onClose: function () { setRunsRule(null); } })
+      e(RunsDrawer, { rule: runsRule, onClose: function () { setRunsRule(null); } }),
+      e(ScriptModal, { open: !!scrRule, rule: scrRule, agentId: agentId(),
+        onClose: function () { setScrRule(null); }, onSaved: function () { load(); } })
     );
   }
 

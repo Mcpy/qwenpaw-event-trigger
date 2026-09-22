@@ -65,7 +65,7 @@ GET    /api/events/templates                   内置模板 / bundled templates
 }
 ```
 
-- `script_path` 可代替 `script_content`(推荐内联,引擎统一落盘)/ `script_path` alternative (prefer inline)
+- ~~`script_path`~~ 已退役(v0.3.2):所有脚本统一由引擎托管落盘 `event_trigger/scripts/`,只接受 `script_content`(推荐内联)/ retired — inline `script_content` only
 - `action`:`notify`(只通知不推理,零 token)/ `agent`(触发推理)
 - `interval_seconds` ≥ 10;`cooldown_seconds` 防事件风暴,脚本输出 `cooldown` 可按次覆盖
 - `session_id` 留空 = 独立累积会话(推荐)/ empty = dedicated accumulating session (recommended)
