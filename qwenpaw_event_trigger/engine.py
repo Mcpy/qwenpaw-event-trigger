@@ -25,6 +25,12 @@ from .models import (
 )
 from .protocol import ProtocolError, run_script
 
+# Inbox integration is CODED but DISABLED: the console inbox UI only renders
+# known source_types (cron/subagents/memory...) — a custom "event" source is
+# counted by the unread badge but never listed, and breaks mark-all-read.
+# Flip to True once the platform inbox supports third-party sources.
+INBOX_ENABLED = False
+
 logger = logging.getLogger("qwenpaw.event_trigger")
 
 _SCRIPT_ERRORS = (ProtocolError, subprocess.SubprocessError, TimeoutError, OSError)
@@ -222,12 +228,6 @@ class Engine:
             title=out.get("title") or "event",
             event=out.get("event") or "",
         )
-
-    # Inbox integration is CODED but DISABLED: the console inbox UI only renders
-    # known source_types (cron/subagents/memory...) — a custom "event" source is
-    # counted by the unread badge but never listed, and breaks mark-all-read.
-    # Flip to True once the platform inbox supports third-party sources.
-    INBOX_ENABLED = False
 
     async def _fire(self, rule: EventRule, out: Dict[str, Any]) -> None:
         title = out.get("title") or "event"
