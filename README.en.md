@@ -13,12 +13,14 @@ Built against a real gap: [#338 (webhook support, open since 2026-03)](https://g
 ## Highlights
 
 - 🔁 **Two entry points**: console UI (sidebar "Event Tasks") + agent-authored tasks via the bilingual `event-tasks` skill
-- 🛡 **Registration gate**: syntax check → dry-run (executes once for real, seeds state) → content-hash pinning. No script runs without registration; edited scripts are refused until re-validated
+- 🛡 **Enable = register**: creation validates only; **enabling** runs syntax check → dry-run (executes once for real, resets state) → hash pinning. Disable = deregister; editing a script while running is refused (disable → enable to recover)
+- ⚙️ **In-script CONFIG params**: declare a `CONFIG = {...}` literal at the top of the script (parsed via ast, never executed) — the UI auto-generates a parameter form; changing params = re-register, config and code live in one self-contained file
+- 🔢 **max_triggers**: auto-disable after N fires (0 = unlimited); the per-round counter resets on enable — a fire-once sentinel
 - 🌊 **Anti-storm**: rule-level cooldown + script-level hysteresis (state persisted by the engine and fed back)
 - 🎯 **Two actions**: `notify` (zero tokens) / `agent` (**in-process injection** via `stream_query` — same path as cron, no HTTP/SSE overhead)
 - 📡 **Dispatch modes**: `stream` (per-event forwarding) / `final`; silent delivery supported
 - 🌍 **Bilingual**: UI / agent skill / template metadata (zh/en)
-- 📦 **5 bundled templates**: stock threshold (NVDA via Yahoo) / HTTP probe / file change / port alive / log keyword
+- 📦 **5 bundled templates**: stock dual-bound monitor (NVDA via Yahoo, up/down hysteresis) / HTTP probe / file change / port alive / log keyword
 - 🔒 **Security**: registration registry (no folder scanning) + SHA-256 integrity lock + resource guards (timeout / 64KB stdout cap / interval floor) + audit log
 
 ## Install
@@ -47,6 +49,16 @@ Exit 0 = ok; non-zero = error (logged, never fires). stdout ≤ 64KB. Timeout 60
 
 Hysteresis skeleton and the full spec: `GET /api/events/protocol`; ready-made templates: `GET /api/events/templates`.
 
+## Fire-evolve loop (core pattern)
+
+```text
+rule (UP=100, DOWN=90, max_triggers=1) -> price crosses 100 -> fire + auto-disable
+  -> agent reasons "watch 105-120" -> PUT new CONFIG + enable (counter resets)
+  -> next round: cross 120 or fall back to 105 -> fire again -> evolve again
+```
+
+Three decision layers: the **script owns the intelligence** (hysteresis, release rules), the **config owns the bounds** (max_triggers/timeouts/cooldown), the **engine owns the bookkeeping** (state storage, resets, scheduling) — it never interprets the script's state semantics.
+
 ## Security model
 
 Scripts run inside your local trust domain (equivalent to writing your own crontab) — no sandbox theater. What the engine prevents: **unregistered scripts running** (registry-only), **silent tampering** (SHA-256 lock + audit log), and **resource abuse** (timeout / output cap / interval floor). Community templates: read the source before use; market-listed ones go through platform scanning.
@@ -56,6 +68,14 @@ Scripts run inside your local trust domain (equivalent to writing your own cront
 - List on the official plugin market
 - CLI client (standalone `qwenpaw-event` pip package wrapping the REST API — the plugin system has no CLI extension point; cron's CLI is a built-in kernel subcommand)
 - Execution model selection (cron parity) · Webhook-type event sources
+
+## FAQ
+
+**Q: Who maintains the `armed` state?**
+The script defines its semantics; the engine stores it, feeds it back via `EVENT_STATE`, and resets it on re-registration (create/save/enable = a fresh round).
+
+**Q: Does deleting a task delete the script?**
+Yes — the engine-managed script is removed with the task (the confirm dialog warns you); a startup GC sweeps orphans. Path-referenced external scripts are untouched.
 
 ## License
 
