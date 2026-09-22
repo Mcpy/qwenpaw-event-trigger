@@ -30,7 +30,7 @@ Event task = **condition-driven** (fires when something happens); cron = **time-
 
 基础地址 / Base: `http://127.0.0.1:8088`(本机免认证 / no auth on localhost);远程 / remote: `Authorization: Bearer <token>`。
 
-**v0.3 起按 agent 隔离 / agent-scoped since v0.3**:每个任务属于创建它的 agent,数据存于该 agent 的工作区;URL 必须带 `agent_id` 段(用你自己的 agent_id / workspace id)。任务只在自己的作用域内可见可管理 / Each task belongs to the agent that created it; URLs must carry the `agent_id` segment. Tasks are only visible/manageable within their own scope.
+**按 agent 隔离 / agent-scoped**:每个任务属于创建它的 agent,数据存于该 agent 的工作区;URL 必须带 `agent_id` 段(用你自己的 agent_id / workspace id)。任务只在自己的作用域内可见可管理 / Each task belongs to the agent that created it; URLs must carry the `agent_id` segment. Tasks are only visible/manageable within their own scope.
 
 ```
 GET    /api/events/{agent_id}/                 列出本 agent 的任务 / list own tasks
@@ -65,9 +65,10 @@ GET    /api/events/templates                   内置模板 / bundled templates
 }
 ```
 
-- `script_rel`:**引用注册**(v0.3.6)——脚本已存在于 `event_trigger/scripts/` 时(如平台文件页手写),传裸文件名 `"check_btc.py"` 代替 `script_content`;与 `script_content` 互斥,只允许目录下已有的 `.py` 裸文件名
-  / **by-reference** (v0.3.6): if the script already exists under `event_trigger/scripts/` (e.g. hand-written on the platform file page), pass its bare file name instead of inline content; mutually exclusive with `script_content`, basename-only `.py`
-- ~~`script_path`~~ 已退役(v0.3.2):所有脚本统一由引擎托管落盘 `event_trigger/scripts/`,只接受 `script_content`(内联)或 `script_rel`(引用)/ retired — inline `script_content` or by-ref `script_rel` only
+- **脚本来源二选一 / script source, exactly one**:
+  - `script_content`:内联完整脚本 / inline full script text
+  - `script_rel`:**引用注册**——脚本已存在于 `event_trigger/scripts/` 时(如平台文件页手写),传裸文件名 `"check_btc.py"`;只允许该目录下已有的 `.py` 裸文件名,与 `script_content` 互斥,注册不改写文件内容
+    / **by-reference**: if the script already exists under `event_trigger/scripts/` (e.g. hand-written on the platform file page), pass its bare file name; existing basename-only `.py`, mutually exclusive with `script_content`, file content never rewritten by registration
 - `action`:`notify`(只通知不推理,零 token)/ `agent`(触发推理)
 - `interval_seconds` ≥ 10;`cooldown_seconds` 防事件风暴,脚本输出 `cooldown` 可按次覆盖
 - `session_id` 留空 = 独立累积会话(推荐)/ empty = dedicated accumulating session (recommended)
@@ -146,15 +147,15 @@ else:
 3. 持续为真的条件没设滞回或冷却 → 风暴 / Persistent condition without hysteresis/cooldown → storm
 4. 改脚本不重新 PUT → hash 拒跑 / Script edited without re-PUT → hash check refuses
 5. `agent_id` 缺失或错 → 挂错 agent / wrong/missing `agent_id` → lands on wrong agent
-6. **删除任务会同步删除引擎托管的脚本文件**(scripts 目录内;agent 自己写的脚本通常只有这一份)——删除前确认是否需要保留,引用路径模式的外部脚本不受影响 / Deleting a task also deletes its engine-managed script file (often the only copy of an agent-authored script) — confirm before deleting; scripts referenced by path are untouched
+6. **删除任务会同步删除引擎托管的脚本文件**(scripts 目录内;agent 自己写的脚本通常只有这一份)——删除前确认是否需要保留 / Deleting a task also deletes its engine-managed script file (often the only copy of an agent-authored script) — confirm before deleting
 
 ## 最小工作流 / Minimal workflow
 
 ```
 1. 条件触发(事件任务)还是时间触发(cron)? / condition or time?
 2. 与用户确认触发条件 → 设计检查脚本(CONFIG 参数 + 滞回)/ design checker (CONFIG + hysteresis)
-3. POST /api/events/{agent_id}/ 创建(enabled=false):脚本来源二选一——`script_content` 内联;或先经平台文件页把脚本写进 `event_trigger/scripts/` 再传 `script_rel` 裸文件名(v0.3.6)
-   / create (enabled=false): script via inline `script_content`, or write it to `event_trigger/scripts/` on the platform file page first and pass `script_rel` (v0.3.6)
+3. POST /api/events/{agent_id}/ 创建(enabled=false):脚本来源二选一——`script_content` 内联;或先经平台文件页把脚本写进 `event_trigger/scripts/` 再传 `script_rel` 裸文件名
+   / create (enabled=false): script via inline `script_content`, or write it to `event_trigger/scripts/` on the platform file page first and pass `script_rel`
 4. POST /{id}/run 验证一次检查 / verify one check
 5. POST /{id}/enable 启用(= 注册:校验+试跑+hash 锚定)/ enable = register
 6. 排查 GET /{id}/runs;修改 PUT(仅任务设置不带 script_content/script_rel 时脚本文件不动;换绑传 script_rel)/ inspect runs; modify via PUT — script file untouched when neither script field is passed; rebind via script_rel
