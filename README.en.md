@@ -13,6 +13,7 @@ Built against a real gap: [#338 (webhook support, open since 2026-03)](https://g
 ## Highlights
 
 - 🔁 **Two entry points**: console UI (sidebar "Event Tasks") + agent-authored tasks via the bilingual `event-tasks` skill
+- 🧩 **Bundled agent skill, self-teaching**: the `event-tasks` skill (bilingual) is injected on install — it is the manual written *for agents* (protocol, templates, param evolution, common pitfalls). An agent that reads it can author scripts and manage tasks on its own; humans don't need the docs.
 - 🛡 **Enable = register**: creation validates only; **enabling** runs syntax check → dry-run (executes once for real, resets state) → hash pinning. Disable = deregister; editing a script while running is refused (disable → enable to recover)
 - ⚙️ **In-script CONFIG params**: declare a `CONFIG = {...}` literal at the top of the script (parsed via ast, never executed) — the UI auto-generates a parameter form; changing params = re-register, config and code live in one self-contained file
 - 🔢 **max_triggers**: auto-disable after N fires (0 = unlimited); the per-round counter resets on enable — a fire-once sentinel
