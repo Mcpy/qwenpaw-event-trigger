@@ -32,6 +32,18 @@
     });
   }
   function ts(v) { return v ? new Date(v * 1000).toLocaleString() : "—"; }
+  function coerceConfig(cfg) {
+    // numbers/bools stay typed; everything else as string
+    var out = {};
+    Object.keys(cfg || {}).forEach(function (k) {
+      var x = cfg[k];
+      if (x === "true") out[k] = true;
+      else if (x === "false") out[k] = false;
+      else if (x !== "" && !isNaN(Number(x))) out[k] = Number(x);
+      else out[k] = x;
+    });
+    return out;
+  }
 
   /* ================= i18n ================= */
   var L10N = {
@@ -48,6 +60,8 @@
       fUser: "目标用户ID", fSession: "目标会话ID", fMode: "分发模式",
       fSilent: "静默投递", fShare: "共用会话", fToolSafety: "工具安全审批",
       fCooldown: "冷却(秒)", fScriptTimeout: "脚本超时(秒)", fTimeout: "推理超时(秒)",
+      fMaxTriggers: "最大触发次数(0=无限)", fConfig: "参数(CONFIG)",
+      cfgAdd: "+ 参数", cfgRemove: "✕", cfgTip: "脚本内 CONFIG 声明的参数;修改后保存会回写脚本并重新校验,启用时以新参数试跑初始化状态。注释不会保留。",
       actionNotify: "通知(不推理)", actionAgent: "Agent 推理",
       srcTemplate: "从模板", srcPaste: "粘贴脚本", srcPath: "引用路径",
       phName: "例如:英伟达突破监控", phPaste: "Python:读 EVENT_STATE,stdout 输出 {triggered:true, title, event, state}",
@@ -74,6 +88,8 @@
       fUser: "Target user ID", fSession: "Target session ID", fMode: "Dispatch mode",
       fSilent: "Silent delivery", fShare: "Shared session", fToolSafety: "Tool safety approval",
       fCooldown: "Cooldown (s)", fScriptTimeout: "Script timeout (s)", fTimeout: "Reasoning timeout (s)",
+      fMaxTriggers: "Max triggers (0 = unlimited)", fConfig: "Parameters (CONFIG)",
+      cfgAdd: "+ Param", cfgRemove: "✕", cfgTip: "Parameters declared in the script's CONFIG block; saving writes them back into the script and re-validates. Enable re-seeds state with the new params. Comments inside CONFIG are not preserved.",
       actionNotify: "Notify (no reasoning)", actionAgent: "Agent reasoning",
       srcTemplate: "From template", srcPaste: "Paste script", srcPath: "Script path",
       phName: "e.g. NVDA breakout watch", phPaste: "Python: read EVENT_STATE, print {triggered:true, title, event, state} to stdout",
@@ -106,7 +122,8 @@
       silentDelivery: "完整执行智能体任务并保留会话和追踪记录,但不向渠道发送结果。",
       shareSession: "开启时,与目标用户共用会话。关闭时,本任务在独立会话中运行,互不影响。适用于不需要记忆历史的独立任务。默认:关闭",
       toolSafety: "开启时,高风险工具调用需要用户审批(可能阻塞无人值守的事件任务)。关闭时,工具调用不再请求审批;文件防护规则仍然生效。默认:关闭",
-      cooldown: "触发后在此时间内不再重复触发,防止事件风暴。脚本也可通过输出 cooldown 字段覆盖。"
+      cooldown: "触发后在此时间内不再重复触发,防止事件风暴。脚本也可通过输出 cooldown 字段覆盖。",
+      maxTriggers: "累计触发该次数后任务自动禁用(0=不限)。重新启用时计数清零,开始新一轮监控。适用于'触发即完成'的一次性监控。"
     },
     en: {
       id: "Unique task ID, assigned automatically at creation, immutable.",
@@ -125,7 +142,8 @@
       silentDelivery: "Run the agent task fully and keep session/trace records, but deliver nothing to channels.",
       shareSession: "When on, shares the session with the target user. When off, this task runs in its own session, isolated from others. For stateless tasks. Default: off",
       toolSafety: "When on, high-risk tool calls require user approval (may block unattended event tasks). When off, tool calls run without approval; file-protection rules still apply. Default: off",
-      cooldown: "After a fire, no re-fire within this window (event-storm protection). The script's cooldown output field can override per-fire."
+      cooldown: "After a fire, no re-fire within this window (event-storm protection). The script's cooldown output field can override per-fire.",
+      maxTriggers: "Auto-disable the task after this many fires (0 = unlimited). The per-round counter resets on enable. Ideal for fire-once watch jobs."
     }
   };
   function mkT(locale) {
@@ -176,6 +194,8 @@
           user_id: (editing.dispatch && editing.dispatch.user_id) || "default",
           session_id: (editing.dispatch && editing.dispatch.session_id) || null,
           cooldown: editing.cooldown_seconds,
+          max_triggers: rt.max_triggers || 0,
+          config: editing.config || {},
           script_timeout: rt.script_timeout_seconds || 60,
           timeout: rt.timeout_seconds || 120,
           share_session: !!rt.share_session,
@@ -188,7 +208,7 @@
         } : {
           enabled: false, interval: 60, action: "agent",
           channel: "console", user_id: "default", session_id: null,
-          cooldown: 600, script_timeout: 60, timeout: 120,
+          cooldown: 600, script_timeout: 60, timeout: 120, max_triggers: 0, config: {},
           share_session: false, tool_safety: false,
           dispatch_mode: "stream", silent: false, inbox: true,
           prompt_template: "Event fired: [{title}] {event}",
@@ -209,6 +229,8 @@
         channel: v.channel || "console", user_id: v.user_id || "default",
         session_id: v.session_id || null,
         cooldown_seconds: v.cooldown === undefined || v.cooldown === null ? 600 : v.cooldown,
+        max_triggers: v.max_triggers || 0,
+        config: editing ? coerceConfig(v.config) : undefined,
         timeout_seconds: v.timeout || 120,
         script_timeout_seconds: v.script_timeout || 60,
         share_session: !!v.share_session, tool_safety: !!v.tool_safety,
@@ -314,6 +336,20 @@
           e(Switch, { checked: v.inbox !== false, disabled: !isAgent, onChange: set("inbox") })),
 
         fi(T("fChecker"), tt(T, locale, "checker"), true, checkerTabs),
+        editing ? fi(T("fConfig"), T("cfgTip"), false,
+          e("div", null,
+            Object.keys(v.config || {}).map(function (k) {
+              return e("div", { key: k, style: { display: "flex", gap: 6, marginBottom: 4 } },
+                e(Input, { value: k, disabled: true, style: { width: "38%" } }),
+                e(Input, { value: String(v.config[k]), style: { flex: 1 },
+                  onChange: function (ev) { var n = Object.assign({}, v.config); n[k] = ev.target.value; set("config")(n); } }),
+                e(Button, { size: "small", type: "text", danger: true,
+                  onClick: function () { var n = Object.assign({}, v.config); delete n[k]; set("config")(n); } }, "✕"));
+            }),
+            e(Button, { size: "small", onClick: function () {
+              var n = Object.assign({}, v.config); n["param_" + Object.keys(n).length] = ""; set("config")(n);
+            } }, T("cfgAdd"))
+          )) : null,
         e("div", { style: { marginBottom: 14 } },
           e("div", { style: { marginBottom: 6 } }, lab(T("fInterval"), tt(T, locale, "interval"), true)),
           e(InputNumber, { min: 10, value: v.interval, style: { width: 140 }, onChange: set("interval") })),
@@ -376,6 +412,7 @@
 
         e("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 } },
           e(Space, { align: "center" }, lab(T("fCooldown"), tt(T, locale, "cooldown"), false), e(InputNumber, { min: 0, value: v.cooldown, style: { width: 100 }, onChange: set("cooldown") })),
+          e(Space, { align: "center" }, lab(T("fMaxTriggers"), tt(T, locale, "maxTriggers"), false), e(InputNumber, { min: 0, value: v.max_triggers, style: { width: 100 }, onChange: set("max_triggers") })),
           e(Space, { align: "center" }, e(Text, null, T("fScriptTimeout")), e(InputNumber, { min: 1, value: v.script_timeout, style: { width: 90 }, onChange: set("script_timeout") })),
           e(Space, { align: "center" }, e(Text, null, T("fTimeout")), e(InputNumber, { min: 1, value: v.timeout, style: { width: 90 }, onChange: set("timeout") }))
         ),

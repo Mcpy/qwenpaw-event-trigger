@@ -1,39 +1,44 @@
 # -*- coding: utf-8 -*-
 """Bundled checker-script templates (single source of truth).
 
-Served at GET /api/events/templates so agents can fetch ready-made
-checkers instead of writing from scratch. Placeholders (__NAME__) are
-substituted client-side before registration.
+Each template declares a top-level `CONFIG = {...}` literal dict (ast-parseable,
+never executed) holding user-tunable parameters. Placeholders (__NAME__) are
+substituted at creation time; after that, params are edited via the CONFIG
+block (UI auto-form / PUT config), which re-registers on enable by design.
 """
 
 TEMPLATES = [
     {
         "id": "stock",
-        "name": {"zh": "股价阈值监控(滞回)", "en": "Stock price threshold (hysteresis)"},
+        "name": {"zh": "股价阈值监控(滞回,双边界)", "en": "Stock price threshold (hysteresis, dual-bound)"},
         "params": [
             {"k": "__TICKER__", "d": "NVDA", "label": {"zh": "股票代码(如 NVDA、AAPL、TSLA)", "en": "Ticker (NVDA, AAPL, TSLA)"}},
-            {"k": "__THRESHOLD__", "d": "200", "label": {"zh": "触发阈值", "en": "Threshold"}},
-            {"k": "__RELEASE_PCT__", "d": "0.98", "label": {"zh": "重武装比例(0.98=回踩2%)", "en": "Release ratio (0.98 = re-arm at 2% pullback)"}},
+            {"k": "__THRESHOLD_UP__", "d": "200", "label": {"zh": "上界:涨破触发", "en": "Upper bound: fire when price >= up"}},
+            {"k": "__THRESHOLD_DOWN__", "d": "180", "label": {"zh": "下界:跌破触发", "en": "Lower bound: fire when price <= down"}},
         ],
         "script": '''#!/usr/bin/env python3
 import json, os, urllib.request
 
-TICKER = "__TICKER__"
-THRESHOLD = float("__THRESHOLD__")
-RELEASE = THRESHOLD * float("__RELEASE_PCT__")
+CONFIG = {
+    "ticker": "__TICKER__",
+    "threshold_up": __THRESHOLD_UP__,     # 涨破触发
+    "threshold_down": __THRESHOLD_DOWN__, # 跌破触发
+}
 
 state = json.loads(os.environ.get("EVENT_STATE") or "{}")
 armed = bool(state.get("armed", True))
-url = "https://query1.finance.yahoo.com/v8/finance/chart/" + TICKER + "?interval=1d&range=1d"
+up = float(CONFIG["threshold_up"])
+down = float(CONFIG["threshold_down"])
+url = "https://query1.finance.yahoo.com/v8/finance/chart/" + CONFIG["ticker"] + "?interval=1d&range=1d"
 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 with urllib.request.urlopen(req, timeout=10) as r:
     meta = json.load(r)["chart"]["result"][0]["meta"]
 price = float(meta["regularMarketPrice"])
 
-if armed and price >= THRESHOLD:
-    print(json.dumps({"triggered": True, "title": TICKER + " 突破 " + str(THRESHOLD), "event": TICKER + " 现价 " + str(price) + " USD,已突破阈值 " + str(THRESHOLD) + "。请分析行情并决定是否值得提醒我。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
-elif (not armed) and price <= RELEASE:
-    print(json.dumps({"triggered": False, "state": {"armed": True, "last_price": price}}, ensure_ascii=False))
+if armed and (price >= up or price <= down):
+    direction = "涨破" if price >= up else "跌破"
+    bound = up if price >= up else down
+    print(json.dumps({"triggered": True, "title": CONFIG["ticker"] + " " + direction + " " + str(bound), "event": CONFIG["ticker"] + " 现价 " + str(price) + " USD," + direction + "边界 " + str(bound) + "。请分析行情并决定是否值得提醒我;若需继续观望,请更新本任务 CONFIG 后重新启用。", "state": {"armed": False, "last_price": price}}, ensure_ascii=False))
 else:
     print(json.dumps({"triggered": False, "state": {"armed": armed, "last_price": price}}, ensure_ascii=False))
 ''',
@@ -46,17 +51,21 @@ else:
             {"k": "__TIMEOUT__", "d": "10", "label": {"zh": "超时秒数", "en": "Timeout seconds"}},
         ],
         "script": '''#!/usr/bin/env python3
-import json, urllib.request
+import json, os, urllib.request
 
-URL = "__URL__"
+CONFIG = {
+    "url": "__URL__",
+    "timeout": __TIMEOUT__,
+}
+
 try:
-    with urllib.request.urlopen(URL, timeout=__TIMEOUT__) as r:
+    with urllib.request.urlopen(CONFIG["url"], timeout=CONFIG["timeout"]) as r:
         code = r.status
 except Exception as exc:
-    print(json.dumps({"triggered": True, "title": "HTTP 探测失败", "event": URL + " 不可达: " + repr(exc)}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "HTTP 探测失败", "event": CONFIG["url"] + " 不可达: " + repr(exc)}, ensure_ascii=False))
     raise SystemExit(0)
 if code >= 400:
-    print(json.dumps({"triggered": True, "title": "HTTP 状态异常", "event": URL + " 返回 " + str(code)}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "HTTP 状态异常", "event": CONFIG["url"] + " 返回 " + str(code)}, ensure_ascii=False))
 else:
     print(json.dumps({"triggered": False}, ensure_ascii=False))
 ''',
@@ -68,17 +77,17 @@ else:
         "script": '''#!/usr/bin/env python3
 import json, os
 
-PATH = "__PATH__"
+CONFIG = {"path": "__PATH__"}
 st = json.loads(os.environ.get("EVENT_STATE") or "{}")
 try:
-    s = os.stat(PATH)
+    s = os.stat(CONFIG["path"])
     fp = str(s.st_mtime_ns) + ":" + str(s.st_size)
 except OSError as exc:
-    print(json.dumps({"triggered": True, "title": "文件不可访问", "event": PATH + ": " + repr(exc)}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "文件不可访问", "event": CONFIG["path"] + ": " + repr(exc)}, ensure_ascii=False))
     raise SystemExit(0)
 prev = st.get("fingerprint")
 if prev is not None and prev != fp:
-    print(json.dumps({"triggered": True, "title": "文件发生变化", "event": PATH + " 已被修改(mtime/size 变化)。", "state": {"fingerprint": fp}}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "文件发生变化", "event": CONFIG["path"] + " 已被修改(mtime/size 变化)。", "state": {"fingerprint": fp}}, ensure_ascii=False))
 else:
     print(json.dumps({"triggered": False, "state": {"fingerprint": fp}}, ensure_ascii=False))
 ''',
@@ -94,12 +103,12 @@ else:
         "script": '''#!/usr/bin/env python3
 import json, socket
 
-HOST, PORT, TIMEOUT = "__HOST__", __PORT__, __TIMEOUT__
+CONFIG = {"host": "__HOST__", "port": __PORT__, "timeout": __TIMEOUT__}
 try:
-    with socket.create_connection((HOST, PORT), timeout=TIMEOUT):
+    with socket.create_connection((CONFIG["host"], CONFIG["port"]), timeout=CONFIG["timeout"]):
         print(json.dumps({"triggered": False}, ensure_ascii=False))
 except Exception as exc:
-    print(json.dumps({"triggered": True, "title": "端口不可达", "event": HOST + ":" + str(PORT) + " 连接失败: " + repr(exc)}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "端口不可达", "event": CONFIG["host"] + ":" + str(CONFIG["port"]) + " 连接失败: " + repr(exc)}, ensure_ascii=False))
 ''',
     },
     {
@@ -112,26 +121,26 @@ except Exception as exc:
         "script": '''#!/usr/bin/env python3
 import json, os
 
-FILE, KEY = "__FILE__", "__KEYWORD__"
+CONFIG = {"file": "__FILE__", "keyword": "__KEYWORD__"}
 st = json.loads(os.environ.get("EVENT_STATE") or "{}")
 offset = int(st.get("offset", 0))
 try:
-    size = os.path.getsize(FILE)
+    size = os.path.getsize(CONFIG["file"])
 except OSError as exc:
-    print(json.dumps({"triggered": True, "title": "日志文件不可读", "event": FILE + ": " + repr(exc)}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "日志文件不可读", "event": CONFIG["file"] + ": " + repr(exc)}, ensure_ascii=False))
     raise SystemExit(0)
 if size < offset:
     offset = 0  # rotated
 hits = []
-with open(FILE, "r", encoding="utf-8", errors="replace") as f:
+with open(CONFIG["file"], "r", encoding="utf-8", errors="replace") as f:
     f.seek(offset)
     for line in f:
-        if KEY in line:
+        if CONFIG["keyword"] in line:
             hits.append(line.strip()[:200])
     offset = f.tell()
 if hits:
     more = " (+" + str(len(hits) - 5) + " more)" if len(hits) > 5 else ""
-    print(json.dumps({"triggered": True, "title": "日志命中 " + KEY, "event": chr(10).join(hits[:5]) + more, "state": {"offset": offset}}, ensure_ascii=False))
+    print(json.dumps({"triggered": True, "title": "日志命中 " + CONFIG["keyword"], "event": chr(10).join(hits[:5]) + more, "state": {"offset": offset}}, ensure_ascii=False))
 else:
     print(json.dumps({"triggered": False, "state": {"offset": offset}}, ensure_ascii=False))
 ''',

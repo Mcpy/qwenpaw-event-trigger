@@ -38,6 +38,8 @@ class RegisterBody(BaseModel):
     dispatch_mode: str = "stream"
     silent: bool = False
     save_result_to_inbox: bool = True
+    max_triggers: int = 0
+    config: Optional[dict] = None
     enabled: bool = False
 
 
@@ -75,6 +77,7 @@ def _rule_from_body(rule_id: Optional[str], body: RegisterBody, existing=None):
             dispatch_mode=body.dispatch_mode,
             silent=body.silent,
             save_result_to_inbox=body.save_result_to_inbox,
+            max_triggers=body.max_triggers,
         ),
     )
     if rule_id:
@@ -165,7 +168,7 @@ def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
             raise HTTPException(404, f"unknown rule: {rule_id}")
         rule = _rule_from_body(rule_id, body, existing)
         try:
-            rule, warnings = await manager.update(rule, body.script_content)
+            rule, warnings = await manager.update(rule, body.script_content, config=body.config)
         except RegistrationError as e:
             raise HTTPException(422, str(e)) from e
         return {"ok": True, "warnings": warnings}
@@ -180,10 +183,12 @@ def build_router(manager: RuleManager, repo: Repo, injector=None) -> APIRouter:
 
     @router.post("/{rule_id}/enable")
     async def enable(rule_id: str):
+        # enable = register: re-validate (syntax + dry-run) and re-pin hash first
         try:
+            await manager.validate_for_enable(rule_id)
             await manager.set_enabled(rule_id, True)
         except RegistrationError as e:
-            raise HTTPException(404, str(e)) from e
+            raise HTTPException(422, str(e)) from e
         return {"ok": True}
 
     @router.post("/{rule_id}/disable")

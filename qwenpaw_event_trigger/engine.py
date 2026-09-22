@@ -97,6 +97,9 @@ class Engine:
             )
         )
         if enabled:
+            # new monitoring round: per-round fire counter resets here
+            self._events.states.setdefault(rule_id, RuleState()).trigger_count = 0
+            await self._repo.save(self._events)
             self._spawn(rule)
         else:
             self._drop_task(rule_id)
@@ -128,7 +131,25 @@ class Engine:
             if rule is None or not rule.enabled:
                 return
             try:
-                await self._check_once(rule)
+                fired = await self._check_once(rule)
+                if fired:
+                    rule = self._events.get(rule_id)
+                    st = self._events.states.get(rule_id)
+                    mx = rule.runtime.max_triggers if rule else 0
+                    if rule and mx > 0 and st and st.trigger_count >= mx:
+                        await self._repo.append_run(
+                            RunRecord(rule_id=rule_id, kind="skipped",
+                                      detail=f"auto-disabled: reached max_triggers({mx})")
+                        )
+                        await self._repo.append_audit(
+                            AuditRecord(kind=AuditKind.disable, rule_id=rule_id,
+                                        name=rule.name,
+                                        detail=f"auto: reached max_triggers({mx})")
+                        )
+                        rule.enabled = False
+                        await self._repo.save(self._events)
+                        self._drop_task(rule_id)
+                        return
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # never die
@@ -138,7 +159,7 @@ class Engine:
                 await self._repo.save(self._events)
             await asyncio.sleep(rule.poll.interval_seconds)
 
-    async def _check_once(self, rule: EventRule) -> None:
+    async def _check_once(self, rule: EventRule) -> bool:
         st = self._events.states.setdefault(rule.id, RuleState())
         started = time.time()
         try:
@@ -192,6 +213,7 @@ class Engine:
         )
         if fired:
             await self._fire(rule, out)
+        return fired
 
     # ---- actions ----
 

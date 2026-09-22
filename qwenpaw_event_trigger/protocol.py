@@ -136,3 +136,53 @@ def validate_python_syntax(path: str) -> None:
     import py_compile
 
     py_compile.compile(path, doraise=True)
+
+
+# ---- CONFIG block (script-declared parameters) ----
+# A top-level `CONFIG = {...}` literal dict declares user-tunable parameters.
+# Parsed with ast.literal_eval (never executed); rewritten in place when the
+# user edits parameters. Hash pinning covers the WHOLE file — editing params
+# therefore means disable -> enable (or save), which re-registers by design.
+
+CONFIG_VAR = "CONFIG"
+
+
+def parse_config(source: str) -> Tuple[Dict[str, Any], Optional[Tuple[int, int]]]:
+    """Extract the top-level CONFIG literal dict from script source.
+
+    Returns (config, span) where span = (start_line, end_line), 0-based,
+    end-exclusive — usable as a line slice for in-place rewriting.
+    Returns ({}, None) when the script declares no CONFIG.
+    Raises ProtocolError when CONFIG exists but is not a literal dict.
+    """
+    import ast
+
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            if any(isinstance(t, ast.Name) and t.id == CONFIG_VAR for t in node.targets):
+                try:
+                    cfg = ast.literal_eval(node.value)
+                except Exception as e:
+                    raise ProtocolError(f"CONFIG must be a literal dict: {e}") from e
+                if not isinstance(cfg, dict):
+                    raise ProtocolError("CONFIG must be a dict")
+                return cfg, (node.lineno - 1, node.end_lineno)
+    return {}, None
+
+
+def rewrite_config(source: str, new_cfg: Dict[str, Any]) -> str:
+    """Rewrite the CONFIG assignment block, preserving every other line."""
+    _, span = parse_config(source)
+    if span is None:
+        raise ProtocolError("script has no CONFIG block to update")
+    start, end = span
+    lines = source.splitlines(keepends=True)
+    rendered = "CONFIG = " + json.dumps(new_cfg, ensure_ascii=False, indent=4) + "\n"
+    return "".join(lines[:start]) + rendered + "".join(lines[end:])
+
+
+def parse_config_file(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        cfg, _ = parse_config(f.read())
+    return cfg

@@ -19,6 +19,7 @@ from .models import EventRule, EventsFile, RuleState
 from .protocol import (
     ProtocolError,
     compute_hash,
+    rewrite_config,
     run_script,
     validate_python_syntax,
 )
@@ -107,13 +108,53 @@ class RuleManager:
         return rule, warnings
 
     async def update(
-        self, rule: EventRule, script_content: Optional[str] = None
+        self, rule: EventRule, script_content: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> Tuple[EventRule, List[str]]:
         old = self._engine.events.get(rule.id)
         if not old:
             raise RegistrationError(f"unknown rule: {rule.id}")
         rule.created_at = old.created_at
+        if config is not None:
+            path = rule.script.path or old.script.path
+            rule.script.path = path
+            if not os.path.isfile(path):
+                raise RegistrationError(f"script not found: {path}")
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+            try:
+                new_source = rewrite_config(source, config)
+            except ProtocolError as e:
+                raise RegistrationError(str(e)) from e
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new_source)
         return await self.register(rule, script_content)
+
+    async def validate_for_enable(self, rule_id: str) -> EventRule:
+        """enable = register: re-validate (syntax + dry-run seeding state) and
+        re-pin the hash. Raises RegistrationError -> caller refuses to enable."""
+        rule = self._engine.events.get(rule_id)
+        if not rule:
+            raise RegistrationError(f"unknown rule: {rule_id}")
+        path = rule.script.path
+        if not path or not os.path.isfile(path):
+            raise RegistrationError(f"script not found: {path}")
+        try:
+            await asyncio.to_thread(validate_python_syntax, path)
+            out, _ = await asyncio.to_thread(
+                run_script, path, {}, rule.id, rule.name,
+                rule.script.interpreter, rule.runtime.script_timeout_seconds, "",
+            )
+        except ProtocolError as e:
+            raise RegistrationError(f"启用校验失败: {e}") from e
+        except Exception as e:
+            raise RegistrationError(f"启用校验崩溃: {e!r}") from e
+        rule.script.content_hash = await asyncio.to_thread(compute_hash, path)
+        st = self._engine.events.states.setdefault(rule_id, RuleState())
+        if isinstance(out.get("state"), dict):
+            st.state = out["state"]  # new round: state re-seeded by dry-run
+        await self._repo.save(self._engine.events)
+        return rule
 
     async def set_enabled(self, rule_id: str, enabled: bool) -> EventRule:
         rule = await self._engine.set_enabled(rule_id, enabled)
@@ -136,6 +177,16 @@ class RuleManager:
         await self._engine._check_once(rule)  # noqa: SLF001 — same subsystem
         return {"ok": True, "duration_ms": int((time.time() - started) * 1000)}
 
+    def _safe_config(self, rule: EventRule) -> Dict[str, Any]:
+        """Parsed CONFIG dict of the current script ({} when absent/unparseable)."""
+        try:
+            with open(rule.script.path, "r", encoding="utf-8") as f:
+                from .protocol import parse_config
+                cfg, _ = parse_config(f.read())
+            return cfg
+        except Exception:
+            return {}
+
     def describe(self) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         for r in self._engine.events.rules:
@@ -153,6 +204,7 @@ class RuleManager:
                     "dispatch": r.dispatch.model_dump(),
                     "runtime": r.runtime.model_dump(),
                     "cooldown_seconds": r.runtime.cooldown_seconds,
+                    "config": self._safe_config(r),
                     "run_count": st.run_count,
                     "trigger_count": st.trigger_count,
                     "last_run_at": st.last_run_at,

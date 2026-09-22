@@ -81,11 +81,28 @@ GET    /api/events/templates        内置模板 / bundled templates
 - `triggered` 必须布尔 / boolean required;`state` 被引擎持久化并在下次通过 `EVENT_STATE` 回传 / persisted and fed back
 - 退出码非 0 = 错误(记录不触发)/ non-zero = error (logged, never fires);stdout ≤ 64KB
 
+### 参数声明(CONFIG)/ Parameters (CONFIG block)
+
+脚本顶部声明一个字面量 dict 即为参数(引擎 ast 解析,不执行;UI 自动生成参数表单):
+
+```python
+CONFIG = {
+    "ticker": "NVDA",
+    "threshold_up": 120,     # 涨破触发
+    "threshold_down": 105,   # 跌破触发
+}
+```
+
+- 修改参数 = 修改脚本文件 → **禁用→启用(或保存)即重新注册**,新参数生效;直接改 CONFIG 以外的代码也一样
+- CONFIG 内只能写字面量(数字/字符串/布尔/嵌套),不能写表达式;重写时注释不保留
+
 ### 滞回标准写法 / Hysteresis canonical pattern
 
 ```python
 #!/usr/bin/env python3
 import json, os
+
+CONFIG = {"threshold_up": 120, "threshold_down": 105}
 st = json.loads(os.environ.get("EVENT_STATE") or "{}")
 armed = bool(st.get("armed", True))
 # ... check logic -> should_fire / reset_condition ...
@@ -128,9 +145,22 @@ else:
 
 ```
 1. 条件触发(事件任务)还是时间触发(cron)? / condition or time?
-2. 与用户确认触发条件 → 设计检查脚本(含滞回)/ confirm trigger -> design checker (hysteresis)
+2. 与用户确认触发条件 → 设计检查脚本(CONFIG 参数 + 滞回)/ design checker (CONFIG + hysteresis)
 3. POST /api/events/ 创建(script_content 内联,enabled=false)
 4. POST /{id}/run 验证一次检查 / verify one check
-5. POST /{id}/enable 启用 / enable
+5. POST /{id}/enable 启用(= 注册:校验+试跑+hash 锚定)/ enable = register
 6. 排查 GET /{id}/runs;修改 PUT / inspect runs; modify via PUT
 ```
+
+### 触发-演化循环 / Fire-evolve loop(行情类监控的核心模式)
+
+条件会演化的监控(如"涨破 100 或跌破 90 → 观望期改为 105-120"):
+
+1. 创建:CONFIG 双边界(up=100, down=90)+ `max_triggers: 1` + enabled
+2. 触发后引擎**自动禁用**(旧条件已失效,防空转;审计留痕)
+3. agent 推理后判断新监控范围 → `PUT /api/events/{id}` 带**新 CONFIG**(up=120, down=105)→ 重新校验
+4. `POST /{id}/enable` 启用(本轮触发计数清零)→ 新一轮监控
+5. 人类随时可在 UI 参数表单改 CONFIG,与 agent 走同一接口
+
+`max_triggers` 语义:累计触发 N 次后自动禁用(0=不限);**启用时计数清零**。
+
