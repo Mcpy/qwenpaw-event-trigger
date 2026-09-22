@@ -65,7 +65,9 @@ GET    /api/events/templates                   内置模板 / bundled templates
 }
 ```
 
-- ~~`script_path`~~ 已退役(v0.3.2):所有脚本统一由引擎托管落盘 `event_trigger/scripts/`,只接受 `script_content`(推荐内联)/ retired — inline `script_content` only
+- `script_rel`:**引用注册**(v0.3.6)——脚本已存在于 `event_trigger/scripts/` 时(如平台文件页手写),传裸文件名 `"check_btc.py"` 代替 `script_content`;与 `script_content` 互斥,只允许目录下已有的 `.py` 裸文件名
+  / **by-reference** (v0.3.6): if the script already exists under `event_trigger/scripts/` (e.g. hand-written on the platform file page), pass its bare file name instead of inline content; mutually exclusive with `script_content`, basename-only `.py`
+- ~~`script_path`~~ 已退役(v0.3.2):所有脚本统一由引擎托管落盘 `event_trigger/scripts/`,只接受 `script_content`(内联)或 `script_rel`(引用)/ retired — inline `script_content` or by-ref `script_rel` only
 - `action`:`notify`(只通知不推理,零 token)/ `agent`(触发推理)
 - `interval_seconds` ≥ 10;`cooldown_seconds` 防事件风暴,脚本输出 `cooldown` 可按次覆盖
 - `session_id` 留空 = 独立累积会话(推荐)/ empty = dedicated accumulating session (recommended)
@@ -151,10 +153,11 @@ else:
 ```
 1. 条件触发(事件任务)还是时间触发(cron)? / condition or time?
 2. 与用户确认触发条件 → 设计检查脚本(CONFIG 参数 + 滞回)/ design checker (CONFIG + hysteresis)
-3. POST /api/events/{agent_id}/ 创建(script_content 内联,enabled=false)
+3. POST /api/events/{agent_id}/ 创建(enabled=false):脚本来源二选一——`script_content` 内联;或先经平台文件页把脚本写进 `event_trigger/scripts/` 再传 `script_rel` 裸文件名(v0.3.6)
+   / create (enabled=false): script via inline `script_content`, or write it to `event_trigger/scripts/` on the platform file page first and pass `script_rel` (v0.3.6)
 4. POST /{id}/run 验证一次检查 / verify one check
 5. POST /{id}/enable 启用(= 注册:校验+试跑+hash 锚定)/ enable = register
-6. 排查 GET /{id}/runs;修改 PUT / inspect runs; modify via PUT
+6. 排查 GET /{id}/runs;修改 PUT(仅任务设置不带 script_content/script_rel 时脚本文件不动;换绑传 script_rel)/ inspect runs; modify via PUT — script file untouched when neither script field is passed; rebind via script_rel
 ```
 
 ### 触发-演化循环 / Fire-evolve loop(行情类监控的核心模式)
