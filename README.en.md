@@ -13,10 +13,11 @@ Built against a real gap: [#338 (webhook support, open since 2026-03)](https://g
 ## Highlights
 
 - 🔁 **Two entry points**: console UI (sidebar "Event Tasks") + agent-authored tasks via the bilingual `event-tasks` skill
-- 🗂 **Per-agent isolation (v0.3, cron-aligned)**: rules/scripts/runs live in each agent's workspace (`workspace_dir/event_trigger/`), served under `/api/events/{agent_id}/` — no cross-visibility, no cross-interference
+- 🗂 **Per-agent isolation (cron-aligned)**: rules/scripts/runs live in each agent's workspace (`workspace_dir/event_trigger/`), served under `/api/events/{agent_id}/` — no cross-visibility, no cross-interference
 - 🧩 **Bundled agent skill, self-teaching**: the `event-tasks` skill (bilingual) is injected on install — it is the manual written *for agents* (protocol, templates, param evolution, common pitfalls). An agent that reads it can author scripts and manage tasks on its own; humans don't need the docs.
 - 🛡 **Enable = register**: creation validates only; **enabling** runs syntax check → dry-run (executes once for real, resets state) → hash pinning. Disable = deregister; editing a script while running is refused (disable → enable to recover)
-- ✍️ **Inline script editor (v0.3.2)**: path mode retired — every script is engine-managed under the workspace `event_trigger/scripts/`; one-click view/edit from the task list (platform file-content API, ETag-guarded), save then re-validate (disable → enable) to re-pin; blank-script creation and .py upload supported
+- ✍️ **Managed scripts + in-app editor**: every script is engine-managed under the workspace `event_trigger/scripts/`; "Edit script" opens a dedicated modal from the edit form (platform file-content API, ETag-guarded), save then re-validate (disable → enable) to re-pin
+- 🔗 **By-reference registration**: hand-write a script on the **platform file page**, then register with `script_rel` (bare file name) — mutually exclusive with inline `script_content`, registration never rewrites the file; a PUT that passes neither script field leaves the file untouched
 - ⚙️ **In-script CONFIG params**: declare a `CONFIG = {...}` literal at the top of the script (parsed via ast, never executed) — the UI auto-generates a parameter form; changing params = re-register, config and code live in one self-contained file
 - 🔢 **max_triggers**: auto-disable after N fires (0 = unlimited); the per-round counter resets on enable — a fire-once sentinel
 - 🌊 **Anti-storm**: rule-level cooldown + script-level hysteresis (state persisted by the engine and fed back)
@@ -28,12 +29,14 @@ Built against a real gap: [#338 (webhook support, open since 2026-03)](https://g
 
 ## Install
 
+**Plugin market (recommended)**: [platform.agentscope.io/plugins/event-trigger](https://platform.agentscope.io/plugins/event-trigger)
+
 ```bash
 qwenpaw plugin install /path/to/qwenpaw-event-trigger
 ```
 
 - Sidebar gains "⚡ Event Tasks"; the `event-tasks` skill is auto-installed into workspaces (zh/en)
-- Data lives in `~/.qwenpaw/event_trigger/` (survives uninstall)
+- Data lives in each agent's workspace `event_trigger/` directory (survives uninstall)
 
 ## Quick start
 
@@ -41,7 +44,28 @@ qwenpaw plugin install /path/to/qwenpaw-event-trigger
 
 **Agent**: *"Watch NVDA and analyze + notify me when it crosses 250."* The agent designs a hysteresis checker, registers it via `POST /api/events/`, verifies with `run`, then enables it.
 
+### Script source (create & update)
+
+| field | use |
+|---|---|
+| `script_content` | inline full script text (form paste / template substitution / agent-generated) |
+| `script_rel` | reference an existing `.py` bare file name under `event_trigger/scripts/` (e.g. hand-written on the platform file page) — registration never rewrites it; mutually exclusive with `script_content` |
+
+PUT semantics: pass neither field → the file is untouched; rebind to another file → pass `script_rel` (hash re-pins).
+
 ## Checker protocol
+
+```text
+IN : env EVENT_STATE (last persisted state JSON, first run "{}"), EVENT_RULE_ID, EVENT_RULE_NAME
+OUT: stdout one JSON line:
+     {"triggered": bool,            required
+      "title": str,                 optional, notification title
+      "event": str,                 optional, body (notify = message; agent action fills the prompt)
+      "cooldown": int,              optional, per-fire cooldown override
+      "state": {...}}               optional, persisted and fed back next run (hysteresis)
+exit code: 0 = ok; non-zero = error (logged, never fires)
+limits: stdout <= 64KB; script timeout 60s default; interval >= 10s
+```
 
 ```text
 IN : env EVENT_STATE (last persisted state, "{}" first run), EVENT_RULE_ID, EVENT_RULE_NAME
@@ -68,7 +92,7 @@ Scripts run inside your local trust domain (equivalent to writing your own cront
 
 ## Roadmap
 
-- List on the official plugin market
+- ✅ Listed on the [official plugin market](https://platform.agentscope.io/plugins/event-trigger)
 - CLI client (standalone `qwenpaw-event` pip package wrapping the REST API — the plugin system has no CLI extension point; cron's CLI is a built-in kernel subcommand)
 - Execution model selection (cron parity) · Webhook-type event sources
 

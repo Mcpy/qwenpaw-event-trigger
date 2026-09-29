@@ -14,10 +14,11 @@ QwenPaw 的自动化此前只有时间维度(cron / heartbeat)。"英伟达涨�
 ## 特性
 
 - 🔁 **双入口**:控制台 UI(侧边栏"事件任务")+ agent 对话创建(配套 `event-tasks` 技能,中英双语)
-- 🗂 **per-agent 隔离(v0.3,对齐 cron)**:任务/脚本/运行记录存于各 agent 工作区(`workspace_dir/event_trigger/`),API 按 `/api/events/{agent_id}/` 分发——互不可见、互不干扰,重装/演化不再互相覆盖
+- 🗂 **per-agent 隔离(对齐 cron)**:任务/脚本/运行记录存于各 agent 工作区(`workspace_dir/event_trigger/`),API 按 `/api/events/{agent_id}/` 分发——互不可见、互不干扰,重装/演化不再互相覆盖
 - 🧩 **内置 agent 技能,开箱即用**:安装即注入 `event-tasks` 技能(中英双语)——它就是写给 agent 的说明书(协议/模板/参数演化/常见坑),agent 读完即可代写脚本、创建与管理任务,人类无需读文档
 - 🛡 **启用即注册**:创建仅校验;**启用时**语法检查 → 试跑(真实执行一次,初始化状态)→ hash 锚定;禁用=注销;运行中改脚本会拒跑,禁用→启用即恢复
-- ✍️ **脚本在线编辑(v0.3.2)**:路径模式退役,所有脚本统一托管于工作区 `event_trigger/scripts/`;任务列表一键查看/编辑(平台 file-content API,ETag 防并发),保存后引导重新校验(禁用→启用)完成重锚定;也支持"空脚本创建"与"上传 .py"
+- ✍️ **脚本托管 + 在线编辑**:脚本统一托管于工作区 `event_trigger/scripts/`;编辑表单内"编辑脚本"弹窗查看/修改(平台 file-content API,ETag 防并发),保存后引导重新校验(禁用→启用)完成重锚定
+- 🔗 **脚本引用注册**:脚本可直接在**平台文件页**编写,创建/更新时传 `script_rel` 裸文件名即可引用(与内联 `script_content` 互斥,注册不改写文件内容;PUT 不带脚本字段时文件不动)——写代码还给文件页,注册只留引用
 - ⚙️ **脚本内 CONFIG 参数化**:脚本顶部 `CONFIG = {...}` 声明参数(ast 安全解析,绝不执行),UI 自动生成参数表单;改参数=重新注册,配置与代码单文件自包含
 - 🔢 **max_triggers**:触发 N 次自动禁用(0=无限),重新启用时计数清零——"触发一次即完成"的单发哨兵
 - 🌊 **防抖**:规则级冷却 + 脚本级滞回(armed 状态由脚本维护,引擎只负责存取与重置),持续型条件不打风暴
@@ -29,15 +30,17 @@ QwenPaw 的自动化此前只有时间维度(cron / heartbeat)。"英伟达涨�
 
 ## 安装
 
+**插件市场(推荐)**:[platform.agentscope.io/plugins/event-trigger](https://platform.agentscope.io/plugins/event-trigger)
+
 ```bash
 qwenpaw plugin install /path/to/qwenpaw-event-trigger
 ```
 
-或从插件市场安装(待上架)。安装后:
+安装后:
 
 - 控制台侧边栏出现"**⚡ 事件任务**"
 - 工作区自动装入 `event-tasks` 技能(agent 双语)
-- 数据目录:`~/.qwenpaw/event_trigger/`(卸载插件不删除数据)
+- 数据:各 agent 工作区 `event_trigger/` 目录(卸载插件不删除数据)
 
 ## 快速开始
 
@@ -53,6 +56,15 @@ qwenpaw plugin install /path/to/qwenpaw-event-trigger
 > "帮我盯着英伟达,涨破 250 就分析一下行情并提醒我"
 
 agent 会凭 `event-tasks` 技能:设计滞回检查脚本 → `POST /api/events/` 注册 → `run` 验证一次 → `enable` 启用。
+
+### 脚本来源(创建/更新通用)
+
+| 字段 | 用法 |
+|---|---|
+| `script_content` | 内联完整脚本(表单粘贴 / 模板实例化 / agent 生成) |
+| `script_rel` | 引用 `event_trigger/scripts/` 下**已有**的 `.py` 裸文件名(如平台文件页手写)——注册不改写文件内容;与 `script_content` 互斥 |
+
+PUT 更新同理:只改任务设置(不带两个脚本字段)→ 文件完全不动;换绑其他脚本 → 传 `script_rel`(hash 重锚)。
 
 ## 检查脚本协议
 
@@ -143,7 +155,7 @@ skills/event-tasks → agent 对话创建 ─┐
 v0.3 起按 agent 隔离:每个 agent 工作区的 `event_trigger/` 目录(events.json + scripts + runs/audit)。v0.2 的全局数据会在启动时自动迁移到各工作区(旧文件归档为 `events.json.pre-migrate`)。
 
 **Q:删除任务,脚本文件会删吗?**
-会。删除任务时同步删除引擎托管的脚本文件(确认窗有提示,不可恢复);启动时还会 GC 清理孤儿脚本。引用路径模式的外部脚本不受影响。
+会。删除任务时同步删除引擎托管的脚本文件(确认窗有提示,不可恢复);启动时还会 GC 清理孤儿脚本。
 
 **Q:为什么修改脚本后任务报错不跑了?**
 hash 完整性锁:内容变更后必须重新保存(走一遍注册关卡)。这是防止"注册后被静默替换"的核心机制。
@@ -159,7 +171,7 @@ hash 完整性锁:内容变更后必须重新保存(走一遍注册关卡)。这
 
 ## Roadmap
 
-- [ ] 上架官方插件市场
+- [x] ✅ 上架官方插件市场([platform.agentscope.io/plugins/event-trigger](https://platform.agentscope.io/plugins/event-trigger))
 - [ ] CLI 客户端(`qwenpaw-event` 独立 pip 包,封装 REST——插件系统暂无 CLI 扩展点,cron 的 CLI 是内核内置子命令)
 - [ ] 执行模型选择(cron 同款)
 - [ ] webhook 型事件源(统一纳入管理)
