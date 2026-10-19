@@ -273,7 +273,7 @@
 
     function submit(validateOnly) {
       if (!v.name) { message.error(T("nameRequired")); return; }
-      if (source === "paste" && !(v.script_content || "").trim()) { message.error(T("pasteRequired")); return; }
+      if (source === "paste" && !editing && !(v.script_content || "").trim()) { message.error(T("pasteRequired")); return; }
       setSaving(true);
       var body = buildBody();
       var url = editing ? ("/" + editing.id + "?validate_only=" + validateOnly) : ("/?validate_only=" + validateOnly);
