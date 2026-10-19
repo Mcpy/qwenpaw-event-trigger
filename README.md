@@ -181,3 +181,5 @@ hash 完整性锁:内容变更后必须重新保存(走一遍注册关卡)。这
 ## License
 
 [Apache 2.0](./LICENSE)
+
+版本变更记录:[CHANGELOG.md](./CHANGELOG.md)

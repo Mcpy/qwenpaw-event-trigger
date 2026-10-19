@@ -107,3 +107,5 @@ Yes — the engine-managed script is removed with the task (the confirm dialog w
 ## License
 
 [Apache 2.0](./LICENSE)
+
+Version history: [CHANGELOG.md](./CHANGELOG.md)
