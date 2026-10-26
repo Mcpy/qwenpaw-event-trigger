@@ -292,7 +292,7 @@ class Engine:
         await cm.send_text(
             channel=rule.dispatch.channel,
             user_id=rule.dispatch.user_id,
-            session_id=rule.dispatch.session_id or f"event:{rule.id}",
+            session_id=rule.dispatch.session_id or "",
             text=text,
             meta={"suppress_console_push": False},
         )

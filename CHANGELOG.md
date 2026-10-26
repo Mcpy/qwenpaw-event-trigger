@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.10 (2026-10-20)
+
+Fixed per issue [#1](https://github.com/Mcpy/qwenpaw-event-trigger/issues/1) (reported by BeiMu-new):
+
+### Fixed
+- **非 ASCII 检查输出乱码**:子进程 stdio 强制 UTF-8(`PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`)——修复中文/cp936 locale 宿主上脚本输出被按 UTF-8 硬解成替换字符的问题(`protocol.py`)。
+- **notify 投递到伪造句柄**:空 `session_id` 不再合成 `event:<rule_id>`(QQ 等频道会把它当投递句柄导致 404),改为透传空值,由频道回退到 `user_id` 句柄(`engine.py`)。
+- 回归测试 `tests/test_issue1_fixes.py`(7 用例:env 注入 / 中文 round-trip / session_id 透传)。
+
+> 注:频道层 `send_text` 吞掉投递失败(返回值被忽略)导致任务误报成功——属 QwenPaw core 层问题,已列入官方反馈清单。
+
 ## v0.3.9 (2026-10-19)
 
 ### Fixed

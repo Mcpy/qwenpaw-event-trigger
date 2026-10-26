@@ -108,6 +108,10 @@ def run_script(
             )
 
     env = dict(os.environ)
+    # Force the child's stdio to UTF-8 regardless of host locale (cp936/GBK
+    # hosts would otherwise emit non-UTF-8 bytes that mojibake on decode).
+    env["PYTHONIOENCODING"] = "utf-8"
+    env.setdefault("PYTHONUTF8", "1")
     env["EVENT_STATE"] = json.dumps(state, ensure_ascii=False)
     env["EVENT_RULE_ID"] = rule_id
     env["EVENT_RULE_NAME"] = rule_name
